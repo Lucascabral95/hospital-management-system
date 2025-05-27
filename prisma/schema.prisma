@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleAccess {
+  ADMIN
+  DOCTOR
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum Status {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum Specialty {
+  Clinician
+}
+
+model Auth {
+  id        Int        @id @default(autoincrement())
+  full_name String
+  email     String     @unique
+  password  String
+  role      RoleAccess
+  is_active Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  Doctor    Doctor[]
+}
+
+model Patients {
+  id          Int     @id @default(autoincrement())
+  dni         String  @unique
+  name        String
+  last_name   String
+  date_born   String
+  gender      Gender
+  phone       String
+  email       String
+  is_admitted Boolean @default(false)
+
+  street   String?
+  city     String?
+  state    String?
+  zip_code String?
+  country  String?
+
+  medical_records MedicalRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Appointment Appointment[]
+}
+
+// Advanced
+
+model Doctor {
+  id             Int             @id @default(autoincrement())
+  specialty      String
+  licenceNumber  Int             @unique
+  medicalRecords MedicalRecord[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  auth   Auth @relation(fields: [authId], references: [id])
+  authId Int
+}
+
+model MedicalRecord {
+  id             Int       @id @default(autoincrement())
+  Doctor         Doctor?   @relation(fields: [doctorId], references: [id])
+  doctorId       Int?
+  date           DateTime  @default(now())
+  reasonForVisit String
+  diagnosis      String?
+  treatment      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  Patients       Patients? @relation(fields: [patientsId], references: [id])
+  patientsId     Int?
+
+  Prescriptions Prescriptions?
+}
+
+model Prescriptions {
+  id Int @id @default(autoincrement())
+
+  MedicalRecord   MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
+  medicalRecordId Int?           @unique
+
+  medication String?
+  dosage     String?
+  duration   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Appointment {
+  id Int @id @default(autoincrement())
+
+  patient    Patients @relation(fields: [patientsId], references: [id])
+  patientsId Int
+
+  specialty Specialty @default(Clinician)
+
+  status      Status   @default(PENDING)
+  scheduledAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
