@@ -6,6 +6,7 @@ interface EnvVars {
   SECRET_JWT: string;
   PAGE: number;
   LIMIT: number;
+  PORT_ORIGIN_WEBSOCKET: string;
 }
 
 const envsSchama = joi
@@ -14,6 +15,7 @@ const envsSchama = joi
     SECRET_JWT: joi.string().required(),
     PAGE: joi.number().required(),
     LIMIT: joi.number().required(),
+    PORT_ORIGIN_WEBSOCKET: joi.string().required(),
   })
   .unknown(true);
 
@@ -32,4 +34,5 @@ export const envs = {
   secretJwt: envVars.SECRET_JWT,
   page: envVars.PAGE,
   limit: envVars.LIMIT,
+  portOriginWebsocket: envVars.PORT_ORIGIN_WEBSOCKET,
 };

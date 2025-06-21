@@ -5,7 +5,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
-import { CreateAppointmentDto, UpdateAppointmentDto, GetAppointmentsDto } from "./dto";
+import { CreateAppointmentDto, FilterAppointmentsDto, UpdateAppointmentDto } from "./dto";
 import { PrismaClient } from "@prisma/client";
 import { PatientsService } from "src/patients/patients.service";
 
@@ -37,15 +37,60 @@ export class AppointmentsService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  async findAll(): Promise<GetAppointmentsDto[]> {
-    return await this.appointment.findMany();
+  async findAll(filterAppointmentDto: FilterAppointmentsDto) {
+    try {
+      const allAppointments = await this.appointment.findMany({
+        where: {
+          status: filterAppointmentDto.status === "ALL" ? undefined : filterAppointmentDto.status,
+        },
+        orderBy: {
+          updatedAt: "asc",
+        },
+        include: {
+          patient: {
+            select: {
+              id: true,
+              name: true,
+              last_name: true,
+              dni: true,
+              date_born: true,
+              gender: true,
+              phone: true,
+              email: true,
+              country: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+
+      return allAppointments;
+    } catch (error) {
+      throw new InternalServerErrorException("Error finding appointments");
+    }
   }
 
-  async findOne(id: number): Promise<GetAppointmentsDto> {
+  async findOne(id: number) {
     try {
       const findOneAppointment = await this.appointment.findUnique({
         where: {
-          id,
+          id: id,
+        },
+        include: {
+          patient: {
+            select: {
+              id: true,
+              name: true,
+              last_name: true,
+              dni: true,
+              date_born: true,
+              gender: true,
+              phone: true,
+              email: true,
+              country: true,
+              createdAt: true,
+            },
+          },
         },
       });
 

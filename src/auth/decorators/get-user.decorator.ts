@@ -2,15 +2,12 @@ import { createParamDecorator, ExecutionContext, UnauthorizedException } from "@
 import { PayloadJwtDto } from "../dto";
 import { RoleAccess } from "@prisma/client";
 
-export const GetUser = createParamDecorator((data: string, ctx: ExecutionContext) => {
+export const AdminAndDoctors = createParamDecorator((data: string, ctx: ExecutionContext) => {
   const request = ctx.switchToHttp().getRequest();
   const user: PayloadJwtDto = request.user;
 
-  if (user.is_active === false) throw new UnauthorizedException("User is inactive, talk with an admin");
-
-  if (user.role !== RoleAccess.DOCTOR) throw new UnauthorizedException("Only doctos can access");
-
-  if (data === "lucas") throw new UnauthorizedException("Lucas is not authorized");
+  if (user.role !== RoleAccess.DOCTOR && user.role !== RoleAccess.ADMIN)
+    throw new UnauthorizedException("Only doctors and admins can access");
 
   return "Acceso autorizado";
 });

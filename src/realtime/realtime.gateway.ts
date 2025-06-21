@@ -11,12 +11,18 @@ import { RealtimeService } from "./realtime.service";
 import { Server, Socket } from "socket.io";
 import { Logger, UsePipes, ValidationPipe } from "@nestjs/common";
 import { CreateAppointmentSocketDto } from "./dto";
+import { envs } from "src/config/envs";
 
 @WebSocketGateway({
   cors: {
-    origin: "http://localhost:3000",
+    origin: ["https://hospital-management-system-healthsync.netlify.app"],
     credentials: true,
+    methods: ["GET", "POST", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   },
+  transports: ["websocket"],
+  allowUpgrades: false,
+  perMessageDeflate: false,
 })
 @UsePipes(
   new ValidationPipe({
@@ -29,7 +35,6 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   private readonly logger = new Logger("AppintmentsGateway");
 
   constructor(private readonly realtimeService: RealtimeService) {}
-
   handleConnection(client: any, ...args: any[]) {
     this.logger.log("Client connected", client.id);
   }
@@ -38,23 +43,22 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.logger.log("Client disconnected", client.id);
   }
 
-  //Iniciar el servidor de Socket.io
   @WebSocketServer() server: Server;
 
   @SubscribeMessage("createAppointment")
   async create(@MessageBody() createRealtimeDto: CreateAppointmentSocketDto) {
     const createdAppointment = await this.realtimeService.create(createRealtimeDto);
-
     this.server.emit("createdAppointments", createdAppointment);
 
     return createdAppointment;
   }
 
   @SubscribeMessage("getAppointments")
-  findAll(@ConnectedSocket() socket: Socket) {
-    socket.emit("getAppointments", this.realtimeService.findAll());
+  async findAll(@ConnectedSocket() socket: Socket) {
+    const results = await this.realtimeService.findAll();
+    socket.emit("getAppointments", results);
 
-    return this.realtimeService.findAll();
+    return results;
   }
 
   @SubscribeMessage("updateStatusInProgress")

@@ -1,41 +1,46 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { CreateAuthDto, UpdateAuthDto, LoginDto, PayloadJwtDto } from "./dto";
-import { PrismaClient } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { JwtService } from "@nestjs/jwt";
 import { RoleAccess } from "@prisma/client";
 import { PaginationDto } from "src/common/dto/pagination.dto";
+import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
-export class AuthService extends PrismaClient implements OnModuleInit {
+export class AuthService {
   private readonly logger = new Logger("AuthService");
 
-  constructor(private readonly jwtService: JwtService) {
-    super();
-  }
-
-  onModuleInit() {
-    this.$connect();
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {
     this.logger.log("Connected to database");
   }
 
   async findAll(paginationDto: PaginationDto) {
-    const { limit, page } = paginationDto;
-    const totalPages = Math.ceil((await this.auth.count()) / limit);
-    const total = await this.auth.count();
+    const { limit = 10, page = 1, sortedBy = "full_name", order = "desc" } = paginationDto;
 
-    const allUsers = await this.auth.findMany({
+    const total = await this.prisma.auth.count();
+    const totalPages = Math.ceil(total / limit);
+    const params = ["full_name"];
+    const orderParams = ["asc", "desc"];
+
+    const sortedParameter = params.includes(sortedBy) ? sortedBy : "full_name";
+    const sortedOrder = orderParams.includes(order) ? order : "desc";
+
+    const allUsers = await this.prisma.auth.findMany({
       skip: (page - 1) * limit,
       take: limit,
+      orderBy: { [sortedParameter]: sortedOrder },
       include: {
         Doctor: true,
       },
     });
 
     return {
-      totalPage: totalPages,
-      page: page,
-      total: total,
+      totalPages,
+      page,
+      total,
       data: allUsers,
     };
   }
@@ -43,8 +48,10 @@ export class AuthService extends PrismaClient implements OnModuleInit {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    const user = await this.auth.findUnique({
-      where: { email: email.toLowerCase() },
+    const user = await this.prisma.auth.findUnique({
+      where: {
+        email: email.toLowerCase(),
+      },
     });
 
     if (!user) {
@@ -81,7 +88,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
     const emailLowerCase = email.toLowerCase();
 
     try {
-      const existingUser = await this.auth.findUnique({
+      const existingUser = await this.prisma.auth.findUnique({
         where: {
           email: emailLowerCase,
         },
@@ -93,7 +100,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      const createdUser = await this.auth.create({
+      const createdUser = await this.prisma.auth.create({
         data: {
           password: hashedPassword,
           email: emailLowerCase,
@@ -108,7 +115,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
   }
 
   async findOne(id: number) {
-    const userById = await this.auth.findFirst({
+    const userById = await this.prisma.auth.findFirst({
       where: { id },
       include: {
         Doctor: true,
@@ -129,7 +136,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
   async update(id: number, updateAuthDto: UpdateAuthDto) {
     await this.findOne(id);
 
-    const updateUser = await this.auth.update({
+    const updateUser = await this.prisma.auth.update({
       where: { id },
       data: updateAuthDto,
     });
@@ -143,7 +150,7 @@ export class AuthService extends PrismaClient implements OnModuleInit {
   async remove(id: number) {
     await this.findOne(id);
 
-    const userDeleted = await this.auth.delete({
+    const userDeleted = await this.prisma.auth.delete({
       where: { id },
     });
 

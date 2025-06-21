@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from "@nestjs/common";
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from "@nestjs/common";
 import { AppointmentsService } from "./appointments.service";
-import { CreateAppointmentDto, UpdateAppointmentDto, GetAppointmentsDto } from "./dto";
+import { CreateAppointmentDto, UpdateAppointmentDto, GetAppointmentsDto, FilterAppointmentsDto } from "./dto";
 import { ApiResponse, ApiTags } from "@nestjs/swagger";
 
 @ApiTags("Appointments")
@@ -25,8 +25,8 @@ export class AppointmentsController {
   @ApiResponse({ status: 400, description: "Bad request" })
   @ApiResponse({ status: 404, description: "Appointments not found" })
   @ApiResponse({ status: 500, description: "Internal server error" })
-  findAll(): Promise<GetAppointmentsDto[]> {
-    return this.appointmentsService.findAll();
+  findAll(@Query() filterAppointmentDto: FilterAppointmentsDto) {
+    return this.appointmentsService.findAll(filterAppointmentDto);
   }
 
   @Get(":id")
@@ -34,7 +34,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 404, description: "Appointment not found" })
   @ApiResponse({ status: 500, description: "Internal server error" })
-  findOne(@Param("id") id: string): Promise<GetAppointmentsDto> {
+  findOne(@Param("id") id: string) {
     return this.appointmentsService.findOne(+id);
   }
 

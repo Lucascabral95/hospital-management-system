@@ -10,6 +10,8 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { CreateDoctorDto, UpdateDoctorDto } from "./dto";
 import { AuthService } from "src/auth/auth.service";
 import { PaginationDto } from "src/common/dto/pagination.dto";
+import { MedicalRecords } from "../../mock/MedicalRecords";
+import { GetPatientsOfDoctorByIDDto } from "./dto/get-patients-of-doctor-by-id.dto";
 
 @Injectable()
 export class DoctorsService extends PrismaClient implements OnModuleInit {
@@ -65,7 +67,10 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
     try {
       const findDoctorById = await this.doctor.findFirst({
         where: {
-          id,
+          id: id,
+        },
+        include: {
+          auth: true,
         },
       });
 
@@ -74,6 +79,50 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
       }
 
       return findDoctorById;
+    } catch (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+  }
+
+  async findAllSelect() {
+    try {
+      const allDoctors = await this.doctor.findMany({
+        select: {
+          id: true,
+          specialty: true,
+          auth: {
+            select: {
+              id: true,
+              full_name: true,
+            },
+          },
+        },
+      });
+
+      return allDoctors;
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  async findPatientsOfDoctorById(doctorId: number) {
+    await this.findOne(doctorId);
+
+    try {
+      const findPatientsOfDoctor = await this.doctor.findFirst({
+        where: {
+          id: doctorId,
+        },
+        include: {
+          medicalRecords: {
+            include: {
+              Patients: true,
+            },
+          },
+        },
+      });
+
+      return findPatientsOfDoctor;
     } catch (error) {
       throw new InternalServerErrorException(error.message);
     }
@@ -110,5 +159,16 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
       message: "Doctor deleted successfully",
       deletedDoctor,
     };
+  }
+
+  async totalResource() {
+    const allResource = {
+      totalDoctors: await this.doctor.count(),
+      totalPatients: await this.patients.count(),
+      totalInterments: await this.interment.count(),
+      totalAppointments: await this.appointment.count(),
+    };
+
+    return allResource;
   }
 }

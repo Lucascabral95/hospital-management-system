@@ -2,6 +2,8 @@ import { Injectable, InternalServerErrorException, OnModuleInit } from "@nestjs/
 import { PrismaClient } from "@prisma/client";
 import { auths, Doctors, patients, MedicalRecords, prescriptions, appointments } from "mock";
 import * as bcrypt from "bcrypt";
+import { interments } from "mock/Interments";
+import { diagnosis } from "mock/Diagnosis";
 
 @Injectable()
 export class AppService extends PrismaClient implements OnModuleInit {
@@ -20,6 +22,8 @@ export class AppService extends PrismaClient implements OnModuleInit {
       await this.$executeRaw`TRUNCATE TABLE "Patients" RESTART IDENTITY CASCADE`;
       await this.$executeRaw`TRUNCATE TABLE "MedicalRecord" RESTART IDENTITY CASCADE`;
       await this.$executeRaw`TRUNCATE TABLE "Prescriptions" RESTART IDENTITY CASCADE`;
+      await this.$executeRaw`TRUNCATE TABLE "Interment" RESTART IDENTITY CASCADE`;
+      await this.$executeRaw`TRUNCATE TABLE "Diagnosis" RESTART IDENTITY CASCADE`;
       await this.$executeRaw`TRUNCATE TABLE "Appointment" RESTART IDENTITY CASCADE`;
 
       const seededAuths = await Promise.all(
@@ -53,6 +57,16 @@ export class AppService extends PrismaClient implements OnModuleInit {
 
       await this.prescriptions.createMany({
         data: prescriptions,
+        skipDuplicates: true,
+      });
+
+      await this.interment.createMany({
+        data: interments,
+        skipDuplicates: true,
+      });
+
+      await this.diagnosis.createMany({
+        data: diagnosis,
         skipDuplicates: true,
       });
 

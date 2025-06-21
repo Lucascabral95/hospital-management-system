@@ -7,6 +7,113 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Auth {
+  id        Int        @id @default(autoincrement())
+  full_name String
+  email     String     @unique
+  password  String
+  role      RoleAccess
+  is_active Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  Doctor    Doctor[]
+}
+
+model Patients {
+  id              Int             @id @default(autoincrement())
+  dni             String          @unique
+  name            String
+  last_name       String
+  date_born       String
+  gender          Gender
+  phone           String
+  email           String
+  is_admitted     Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  city            String?
+  country         String?
+  state           String?
+  street          String?
+  zip_code        String?
+  Appointment     Appointment[]
+  Interment       Interment[]
+  medical_records MedicalRecord[]
+}
+
+model Doctor {
+  id             Int             @id @default(autoincrement())
+  specialty      String
+  licenceNumber  Int             @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  authId         Int
+  auth           Auth            @relation(fields: [authId], references: [id])
+  Interment      Interment[]
+  medicalRecords MedicalRecord[]
+}
+
+model MedicalRecord {
+  id             Int            @id @default(autoincrement())
+  doctorId       Int?
+  date           DateTime       @default(now())
+  reasonForVisit String
+  diagnosis      String?
+  treatment      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  patientsId     Int?
+  Doctor         Doctor?        @relation(fields: [doctorId], references: [id])
+  Patients       Patients?      @relation(fields: [patientsId], references: [id])
+  Prescriptions  Prescriptions?
+}
+
+model Prescriptions {
+  id              Int            @id @default(autoincrement())
+  medicalRecordId Int?           @unique
+  medication      String?
+  dosage          String?
+  duration        String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  MedicalRecord   MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
+}
+
+model Appointment {
+  id          Int       @id @default(autoincrement())
+  patientsId  Int
+  specialty   Specialty @default(Clinician)
+  status      Status    @default(PENDING)
+  scheduledAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  patient     Patients  @relation(fields: [patientsId], references: [id])
+}
+
+model Interment {
+  id            Int         @id @default(autoincrement())
+  doctorId      Int
+  patientId     Int
+  admissionDate DateTime    @default(now())
+  dischargeDate DateTime?
+  status        Status      @default(IN_PROGRESS)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  Diagnosis     Diagnosis[]
+  doctor        Doctor      @relation(fields: [doctorId], references: [id])
+  patient       Patients    @relation(fields: [patientId], references: [id])
+}
+
+model Diagnosis {
+  id          Int               @id @default(autoincrement())
+  code        String
+  description String
+  category    DiagnosisCategory @default(ADMISSION)
+  date        DateTime          @default(now())
+  intermentId Int
+  interment   Interment         @relation(fields: [intermentId], references: [id])
+}
+
 enum RoleAccess {
   ADMIN
   DOCTOR
@@ -26,98 +133,21 @@ enum Status {
 
 enum Specialty {
   Clinician
+  FamilyMedicine
+  InternalMedicine
+  Pediatrics
+  Surgery
+  Neurology
+  Psychiatry
+  Dermatology
+  EmergencyMedicine
+  Cardiology
 }
 
-model Auth {
-  id        Int        @id @default(autoincrement())
-  full_name String
-  email     String     @unique
-  password  String
-  role      RoleAccess
-  is_active Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  Doctor    Doctor[]
-}
-
-model Patients {
-  id          Int     @id @default(autoincrement())
-  dni         String  @unique
-  name        String
-  last_name   String
-  date_born   String
-  gender      Gender
-  phone       String
-  email       String
-  is_admitted Boolean @default(false)
-
-  street   String?
-  city     String?
-  state    String?
-  zip_code String?
-  country  String?
-
-  medical_records MedicalRecord[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  Appointment Appointment[]
-}
-
-// Advanced
-
-model Doctor {
-  id             Int             @id @default(autoincrement())
-  specialty      String
-  licenceNumber  Int             @unique
-  medicalRecords MedicalRecord[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-
-  auth   Auth @relation(fields: [authId], references: [id])
-  authId Int
-}
-
-model MedicalRecord {
-  id             Int       @id @default(autoincrement())
-  Doctor         Doctor?   @relation(fields: [doctorId], references: [id])
-  doctorId       Int?
-  date           DateTime  @default(now())
-  reasonForVisit String
-  diagnosis      String?
-  treatment      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  Patients       Patients? @relation(fields: [patientsId], references: [id])
-  patientsId     Int?
-
-  Prescriptions Prescriptions?
-}
-
-model Prescriptions {
-  id Int @id @default(autoincrement())
-
-  MedicalRecord   MedicalRecord? @relation(fields: [medicalRecordId], references: [id])
-  medicalRecordId Int?           @unique
-
-  medication String?
-  dosage     String?
-  duration   String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-}
-
-model Appointment {
-  id Int @id @default(autoincrement())
-
-  patient    Patients @relation(fields: [patientsId], references: [id])
-  patientsId Int
-
-  specialty Specialty @default(Clinician)
-
-  status      Status   @default(PENDING)
-  scheduledAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+enum DiagnosisCategory {
+  ADMISSION
+  SECONDARY
+  COMPLICATION
+  COMORBIDITY
+  DISCHARGE
 }

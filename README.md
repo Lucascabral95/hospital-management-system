@@ -14,7 +14,7 @@ Hospital Management System es una aplicación robusta desarrollada con [NestJS](
 
 - **Gestión Integral de Pacientes:** Registro, actualización y seguimiento de pacientes, incluyendo información personal, historial médico, y estado de admisión.
 - **Administración de Personal Médico:** Gestión de doctores, especialidades y autenticación segura mediante JWT.
-- **Citas Médicas:** Creación, actualización y seguimiento de citas médicas, con estados y especialidades.
+- **Citas Médicas en tiempo real:** Creación, actualización y seguimiento de citas médicas en tiempo real con estados y especialidades.
 - **Historiales Médicos:** Registro detallado de consultas, diagnósticos y tratamientos asociados a cada paciente y doctor.
 - **Prescripciones:** Gestión de recetas médicas vinculadas a historiales clínicos.
 - **Semilla de Datos:** Endpoint para poblar la base de datos con datos de ejemplo para pruebas y desarrollo rápido.

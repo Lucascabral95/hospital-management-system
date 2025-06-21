@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { CreateAppointmentSocketDto, GetAppointmentsDto } from "./dto";
-import { PrismaClient, Status } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class RealtimeService extends PrismaClient implements OnModuleInit {
@@ -19,19 +19,33 @@ export class RealtimeService extends PrismaClient implements OnModuleInit {
   }
 
   async findAll() {
-    return await this.appointment.findMany({
-      orderBy: {
-        createdAt: "asc",
-      },
-      where: {
-        status: {
-          in: [Status.IN_PROGRESS, Status.PENDING],
+    try {
+      const allAppointments = await this.appointment.findMany({
+        orderBy: {
+          updatedAt: "desc",
         },
-      },
-      include: {
-        patient: true,
-      },
-    });
+        include: {
+          patient: {
+            select: {
+              id: true,
+              name: true,
+              last_name: true,
+              dni: true,
+              date_born: true,
+              gender: true,
+              phone: true,
+              email: true,
+              country: true,
+              createdAt: true,
+            },
+          },
+        },
+      });
+
+      return allAppointments;
+    } catch (error) {
+      throw new NotFoundException(error.message);
+    }
   }
 
   private async findOne(id: number): Promise<GetAppointmentsDto> {

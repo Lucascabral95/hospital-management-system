@@ -1,44 +1,34 @@
-FROM node:21-alpine3.19 as deps
-
+# Etapa 1: Instala solo dependencias de producción
+FROM node:22-alpine3.19 AS deps
 WORKDIR /usr/src/app
+COPY package.json package-lock.json ./
+RUN apk add --no-cache python3 make g++ \
+    && npm ci --omit=dev --ignore-scripts \
+    && npm cache clean --force
 
-COPY package.json ./
-COPY package-lock.json ./
+# Etapa 2: Genera el cliente Prisma y construye el proyecto
+FROM node:22-alpine3.19 AS build
+WORKDIR /usr/src/app
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY . .
+COPY prisma ./prisma
+RUN apk add --no-cache python3 make g++ \
+    && npm ci --include=dev \
+    && npx prisma generate \
+    && npm run build \
+    && npm prune --production
 
-RUN npm install 
+# Etapa 3: Imagen final de producción
+FROM node:22-alpine3.19
+WORKDIR /usr/src/app
+ENV NODE_ENV=production
 
+# Copia solo lo necesario para producción
+COPY --from=build /usr/src/app/dist ./dist
+COPY --from=build /usr/src/app/node_modules ./node_modules
 
-
-FROM node:21-alpine3.19 as build
-
-WORKDIR /usr/src/app 
-
-COPY --from=deps /usr/src/app/node_modules ./node_modules   
-
-COPY . .  
-
-RUN npm run build 
-
-RUN npm ci -f --only=production && npm cache clean --force 
-
-RUN npx prisma generate 
-
-
-
-
-FROM node:21-alpine3.19 as prod 
-
-WORKDIR /usr/src/app 
-
-
-COPY --from=build /usr/app/node_modules ./node_modules
-
-COPY --from=build /usr/src/app/dist ./dist 
-
-ENV NODE_ENV=production 
-
-USER node 
-
+USER node
 EXPOSE 4000 
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
+

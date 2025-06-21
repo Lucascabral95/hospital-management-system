@@ -1,6 +1,6 @@
-import { Gender } from "@prisma/client";
+import { Gender, Status } from "@prisma/client";
 import { Transform, Type } from "class-transformer";
-import { IsEnum, IsNumber, IsOptional, IsPositive, IsUppercase } from "class-validator";
+import { IsEnum, IsNumber, IsOptional, IsPositive, IsString } from "class-validator";
 import { envs } from "src/config/envs";
 
 export class PaginationDto {
@@ -16,8 +16,20 @@ export class PaginationDto {
   @IsOptional()
   limit: number = envs.limit;
 
+  @IsString()
+  @IsOptional()
+  sortedBy?: string;
+
+  @IsString()
+  @IsOptional()
+  order?: string;
+
   @IsEnum(Gender)
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.toUpperCase() : value))
   gender?: Gender;
+
+  @IsEnum(Status)
+  @IsOptional()
+  status?: Status;
 }

@@ -1,6 +1,48 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Specialty } from "@prisma/client";
-import { IsDate, IsEnum, IsNumber, IsPositive } from "class-validator";
+import { IsDate, IsEnum, IsNumber, IsPositive, IsString } from "class-validator";
+
+class Patients {
+  @ApiProperty()
+  @IsNumber()
+  id: number;
+
+  @ApiProperty()
+  @IsString()
+  dni: string;
+
+  @ApiProperty()
+  @IsString()
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  last_name: string;
+
+  @ApiProperty()
+  @IsString()
+  date_born: string;
+
+  @ApiProperty()
+  @IsString()
+  gender: string;
+
+  @ApiProperty()
+  @IsString()
+  phone: string;
+
+  @ApiProperty()
+  @IsString()
+  email: string;
+
+  @ApiProperty()
+  @IsString()
+  country: string;
+
+  @ApiProperty()
+  @IsDate()
+  createdAt: Date;
+}
 
 export class GetAppointmentsDto {
   @ApiProperty()
@@ -28,4 +70,7 @@ export class GetAppointmentsDto {
   @ApiProperty()
   @IsDate()
   updatedAt: Date;
+
+  @ApiProperty({ type: () => Patients })
+  patient: Patients;
 }

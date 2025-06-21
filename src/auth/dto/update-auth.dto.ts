@@ -5,5 +5,5 @@ import { IsBoolean, IsOptional } from "class-validator";
 export class UpdateAuthDto extends PartialType(CreateAuthDto) {
   @IsBoolean()
   @IsOptional()
-  status: boolean;
+  is_active: boolean;
 }
