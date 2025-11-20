@@ -92,10 +92,17 @@ Hospital Management System es una aplicación robusta desarrollada con [NestJS](
    curl -X POST http://localhost:4000/api/v1/create/seed/global
    ```
 
-6. **Compila el proyecto:**
-   ```bash
-   npm run build
-   ```
+6. **Correr todas las pruebas unitarias:**
+
+```bash
+npm run test
+```
+
+7. **Compila el proyecto:**
+
+```bash
+npm run build
+```
 
 ---
 

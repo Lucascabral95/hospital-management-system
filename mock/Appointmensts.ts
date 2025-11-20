@@ -1,15 +1,3 @@
-// export const appointments = [
-//   {
-//     patientsId: 1,
-//   },
-//   {
-//     patientsId: 2,
-//   },
-//   {
-//     patientsId: 3,
-//   },
-// ];
-
 import { Status } from "@prisma/client";
 
 export const appointments = [
