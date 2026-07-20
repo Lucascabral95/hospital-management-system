@@ -11,11 +11,11 @@ import { QueryNameLastNameDto } from "src/common/dto/search-patients.dto";
 
 @ApiTags("Patients")
 @Controller("patients")
-@UseGuards(AuthGuard("jwt"))
 export class PatientsController {
   constructor(private readonly patientsService: PatientsService) {}
 
   @Post()
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 201, type: PatientsDto })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 400, description: "Bad request" })
@@ -25,6 +25,7 @@ export class PatientsController {
   }
 
   @Get("select")
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 200, type: [PatientsDto] })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 400, description: "Bad request" })
@@ -34,6 +35,7 @@ export class PatientsController {
   }
 
   @Get()
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 200, type: [PatientsDto] })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 400, description: "Bad request" })
@@ -44,6 +46,7 @@ export class PatientsController {
   }
 
   @Get("search")
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 200, type: [GetAllPatientsDto] })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 400, description: "Bad request" })
@@ -53,17 +56,20 @@ export class PatientsController {
     return this.patientsService.findAllPatientsWithoutPagination(patient.patient);
   }
 
+  // Public on purpose: the unauthenticated patient appointment page (/appointments/patient) looks up patients by DNI.
   @Get("dni/:dni")
   findByDni(@Param("dni") dni: string) {
     return this.patientsService.findByDni(dni);
   }
 
   @Get(":id/medical-records")
+  @UseGuards(AuthGuard("jwt"))
   getMedicalRecordsByPatientId(@AdminAndDoctors() user: string, @Param("id") id: number) {
     return this.patientsService.getMedicalRecordsByPatientId(+id);
   }
 
   @Get(":id")
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 200, type: PatientsDto })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 404, description: "Patient not found" })
@@ -74,6 +80,7 @@ export class PatientsController {
   }
 
   @Patch(":id")
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 200, type: CreatePatientDto })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 404, description: "Patient not found" })
@@ -84,6 +91,7 @@ export class PatientsController {
   }
 
   @Delete(":id")
+  @UseGuards(AuthGuard("jwt"))
   @ApiResponse({ status: 200, description: "Patient deleted successfully" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 404, description: "Patient not found" })
@@ -94,6 +102,7 @@ export class PatientsController {
   }
 
   @Post("seed")
+  @UseGuards(AuthGuard("jwt"))
   seed(@OnlyAdmin() user: string) {
     return this.patientsService.seed();
   }

@@ -15,7 +15,7 @@ import { envs } from "src/config/envs";
 
 @WebSocketGateway({
   cors: {
-    origin: ["https://hospital-management-system-healthsync.netlify.app"],
+    origin: [envs.portOriginWebsocket, "https://hospital-management-system-healthsync.netlify.app"],
     credentials: true,
     methods: ["GET", "POST", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
