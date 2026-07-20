@@ -1,0 +1,27 @@
+set -e
+
+echo "[pre-commit] Compilando el proyecto (npm run build)..."
+if ! npm run build; then
+  echo ""
+  echo "[pre-commit] El build de TypeScript fallo. Commit cancelado."
+  echo "[pre-commit] Corregi los errores de arriba y volve a intentar el commit."
+  exit 1
+fi
+
+echo "[pre-commit] Verificando que Docker este corriendo..."
+if ! docker info > /dev/null 2>&1; then
+  echo ""
+  echo "[pre-commit] Docker no esta corriendo. Inicia Docker Desktop y volve a intentar el commit."
+  exit 1
+fi
+
+echo "[pre-commit] Buildeando la imagen Docker (validacion local, sin push)..."
+if ! docker build -t hospital-management-system:pre-commit-check .; then
+  echo ""
+  echo "[pre-commit] El build de la imagen Docker fallo. Commit cancelado."
+  echo "[pre-commit] Corregi el Dockerfile o el error de arriba y volve a intentar el commit."
+  exit 1
+fi
+
+echo ""
+echo "[pre-commit] Build de TypeScript y de Docker OK. Continuando con el commit."
