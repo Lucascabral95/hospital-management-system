@@ -5,3 +5,15 @@ dist
 Dockerfile
 .dockerignore
 docker-compose.yml
+coverage
+
+# stale frontend copy, not used by the NestJS app (see CLAUDE.md)
+.angular
+.VSCODE
+.vscode
+public
+src/app
+src/environments
+src/testing
+src/test.ts
+src/test-setup.ts
