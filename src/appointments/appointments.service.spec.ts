@@ -148,9 +148,7 @@ describe("AppointmentsService", () => {
 
       await service.getDoctorsBySpecialty(undefined);
 
-      expect(mockPrismaService.doctor.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: undefined }),
-      );
+      expect(mockPrismaService.doctor.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: undefined }));
     });
   });
 

@@ -9,7 +9,7 @@ import {
 } from "@nestjs/websockets";
 import { RealtimeService } from "./realtime.service";
 import { Server, Socket } from "socket.io";
-import { Logger, UseGuards, UsePipes, ValidationPipe } from "@nestjs/common";
+import { BeforeApplicationShutdown, Logger, UseGuards, UsePipes, ValidationPipe } from "@nestjs/common";
 import { CreateAppointmentSocketDto } from "./dto";
 import { envs } from "src/config/envs";
 import { WsJwtGuard } from "./guards/ws-jwt.guard";
@@ -35,7 +35,7 @@ import { NotificationsService } from "src/notifications/notifications.service";
     transform: true,
   }),
 )
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect, BeforeApplicationShutdown {
   private readonly logger = new Logger("AppintmentsGateway");
 
   constructor(
@@ -52,6 +52,15 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @WebSocketServer() server: Server;
+
+  // Corre antes de que Nest cierre el server HTTP (y, con él, el de Socket.IO vía el IoAdapter),
+  // así que todavía hay tiempo de avisar a los clientes y desconectarlos antes de que
+  // PrismaService se desconecte en onApplicationShutdown.
+  beforeApplicationShutdown() {
+    if (!this.server) return;
+    this.server.emit("server:shutdown");
+    this.server.disconnectSockets(true);
+  }
 
   // Public on purpose: the unauthenticated patient page (/appointments/patient) requests appointments this way.
   @SubscribeMessage("createAppointment")

@@ -166,8 +166,14 @@ export class AnalyticsService {
 
     const kpis = {
       total: this.buildKpi(current.total, previous.total),
-      completedRate: this.buildKpi(this.rate(current.completed, current.total), this.rate(previous.completed, previous.total)),
-      cancelledRate: this.buildKpi(this.rate(current.cancelled, current.total), this.rate(previous.cancelled, previous.total)),
+      completedRate: this.buildKpi(
+        this.rate(current.completed, current.total),
+        this.rate(previous.completed, previous.total),
+      ),
+      cancelledRate: this.buildKpi(
+        this.rate(current.cancelled, current.total),
+        this.rate(previous.cancelled, previous.total),
+      ),
       noShowRate: this.buildKpi(this.rate(current.noShow, current.total), this.rate(previous.noShow, previous.total)),
       avgLeadTimeDays: this.buildKpi(currentAvgLead ?? 0, previousAvgLead ?? 0),
     };
@@ -235,7 +241,9 @@ export class AnalyticsService {
     return Math.round(value * 10) / 10;
   }
 
-  private async buildDoctorPerformance(rows: { doctorId: number | null; status: string; _count: { status: number } }[]) {
+  private async buildDoctorPerformance(
+    rows: { doctorId: number | null; status: string; _count: { status: number } }[],
+  ) {
     const doctorIds = [...new Set(rows.map((row) => row.doctorId).filter((id): id is number => id !== null))];
     if (doctorIds.length === 0) return [];
 
@@ -332,9 +340,7 @@ export class AnalyticsService {
           name: appointment.patient.name,
           lastName: appointment.patient.last_name,
         },
-        doctor: appointment.doctor
-          ? { id: appointment.doctor.id, name: appointment.doctor.auth.full_name }
-          : null,
+        doctor: appointment.doctor ? { id: appointment.doctor.id, name: appointment.doctor.auth.full_name } : null,
         stats: { attended: history.attended, noShows: history.noShows, noShowRate },
         riskLevel: this.resolveRiskLevel(base, noShowRate),
       };

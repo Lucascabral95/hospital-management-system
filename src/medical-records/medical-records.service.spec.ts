@@ -186,9 +186,7 @@ describe("MedicalRecordsService", () => {
       mockPatientsService.findOne.mockResolvedValue(mockPatient);
       mockPrismaService.medicalRecord.findMany.mockRejectedValue(new Error("DB error"));
 
-      await expect(service.findMedicalRecordsByPatientId(patientId, paginationDto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findMedicalRecordsByPatientId(patientId, paginationDto)).rejects.toThrow(NotFoundException);
     });
   });
 

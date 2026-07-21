@@ -9,5 +9,4 @@ import { AuthModule } from "src/auth/auth.module";
   imports: [AuthModule],
   exports: [DoctorsModule, DoctorsService],
 })
-// eslint-disable-next-line prettier/prettier
 export class DoctorsModule {}

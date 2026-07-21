@@ -241,9 +241,7 @@ describe("IntermentService", () => {
 
       const result = await service.getAllDiagnosis(paginationDto);
 
-      expect(mockPrismaService.diagnosis.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 0, take: 10 }),
-      );
+      expect(mockPrismaService.diagnosis.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0, take: 10 }));
       expect(result).toEqual({
         totalPage: 1,
         page: 1,
@@ -302,9 +300,7 @@ describe("IntermentService", () => {
       });
       mockPrismaService.interment.update.mockRejectedValue(prismaError);
 
-      await expect(service.addDiagnosisInInterment(999, {} as CreateDiagnosisDto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.addDiagnosisInInterment(999, {} as CreateDiagnosisDto)).rejects.toThrow(NotFoundException);
     });
   });
 

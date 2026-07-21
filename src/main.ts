@@ -1,37 +1,23 @@
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
-import { Logger, ValidationPipe } from "@nestjs/common";
-import * as compression from "compression";
-import helmet from "helmet";
+import { Logger } from "@nestjs/common";
 import { envs } from "./config/envs";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { configureApp } from "./common/bootstrap/configure-app";
+import { registerGracefulShutdown } from "./common/lifecycle/graceful-shutdown";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const logger = new Logger("Main of Hospital Management System");
 
-  app.use(helmet());
-  app.use(compression());
+  configureApp(app);
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-    }),
-  );
-
-  app.enableCors({
-    origin: [envs.portOriginWebsocket, "https://hospital-management-system-healthsync.netlify.app"],
-    credentials: true,
-  });
-
-  app.setGlobalPrefix("api/v1");
-
-  app.enableShutdownHooks();
+  // registerGracefulShutdown ya escucha SIGTERM/SIGINT y llama a app.close() (que dispara los
+  // lifecycle hooks igual que enableShutdownHooks) — sumar enableShutdownHooks() acá duplicaba
+  // el listener de señal y Nest terminaba re-matando el proceso con el disposition por defecto
+  // (exit 143) antes de que nuestro `process.exit(0)` corriera.
+  registerGracefulShutdown(app);
 
   if (process.env.NODE_ENV !== "production") {
     const config = new DocumentBuilder()

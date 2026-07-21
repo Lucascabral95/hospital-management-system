@@ -61,16 +61,12 @@ describe("AnalyticsService", () => {
 
     it("should aggregate analytics from prisma and cache the result", async () => {
       mockCacheManager.get.mockResolvedValue(null);
-      mockPrismaService.appointment.groupBy.mockResolvedValueOnce([
-        { status: "COMPLETED", _count: { status: 5 } },
-      ]);
+      mockPrismaService.appointment.groupBy.mockResolvedValueOnce([{ status: "COMPLETED", _count: { status: 5 } }]);
       mockPrismaService.appointment.groupBy.mockResolvedValueOnce([
         { specialty: "Cardiology", _count: { specialty: 3 } },
       ]);
       mockPrismaService.interment.groupBy.mockResolvedValue([{ status: "IN_PROGRESS", _count: { status: 2 } }]);
-      mockPrismaService.diagnosis.groupBy.mockResolvedValue([
-        { description: "Flu", _count: { description: 4 } },
-      ]);
+      mockPrismaService.diagnosis.groupBy.mockResolvedValue([{ description: "Flu", _count: { description: 4 } }]);
 
       const today = new Date().toISOString().slice(0, 10);
       mockPrismaService.$queryRaw

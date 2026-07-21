@@ -14,11 +14,17 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint:ci": "eslint \"{src,test}/**/*.ts\" --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "jest",
+    "test:unit": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "dotenv -e .env.test -- jest --config ./test/jest-e2e.json --runInBand",
+    "test:e2e:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "test:e2e:down": "docker compose -f docker-compose.test.yml down -v",
+    "test:e2e:local": "npm run test:e2e:up && npm run test:e2e; npm run test:e2e:down"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.1.3",
@@ -39,6 +45,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",
     "helmet": "^8.3.0",
     "joi": "^17.13.3",
@@ -57,6 +64,7 @@
     "@swc/core": "^1.10.7",
     "@types/bcrypt": "^5.0.2",
     "@types/compression": "^1.8.1",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
@@ -64,6 +72,7 @@
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^8.32.1",
     "@typescript-eslint/parser": "^8.32.1",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.27.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.4.0",
@@ -72,6 +81,7 @@
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "prisma": "^6.9.0",
+    "socket.io-client": "^4.8.3",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
@@ -89,17 +99,31 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "testPathIgnorePatterns": [
+      "[\\\\/]node_modules[\\\\/]",
+      ".*[\\\\/]app[\\\\/].*",
+      ".*[\\\\/]environments[\\\\/].*",
+      ".*[\\\\/]testing[\\\\/].*"
+    ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!app/**",
+      "!environments/**",
+      "!testing/**",
+      "!test.ts",
+      "!test-setup.ts",
+      "!**/*.spec.ts",
+      "!main.ts"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/$1",
-      "^mock$": "<rootDir>/../mock"
+      "^mock$": "<rootDir>/../mock",
+      "^mock/(.*)$": "<rootDir>/../mock/$1"
     }
   }
 }

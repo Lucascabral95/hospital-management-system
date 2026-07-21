@@ -18,7 +18,10 @@ export class AnalyticsController {
   }
 
   @Get("insights")
-  @ApiResponse({ status: 200, description: "Operational insights: KPI deltas, peak hours, doctor performance, no-show risk" })
+  @ApiResponse({
+    status: 200,
+    description: "Operational insights: KPI deltas, peak hours, doctor performance, no-show risk",
+  })
   getInsights(@AdminAndDoctors() user: string, @Query() analyticsRangeDto: AnalyticsRangeDto) {
     return this.analyticsService.getInsights(analyticsRangeDto.days);
   }

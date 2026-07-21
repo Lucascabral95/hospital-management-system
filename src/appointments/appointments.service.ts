@@ -38,7 +38,7 @@ export class AppointmentsService {
 
     try {
       if (doctorId && scheduledAt) {
-        return await this.prisma.$transaction(async tx => {
+        return await this.prisma.$transaction(async (tx) => {
           const conflicting = await tx.appointment.findFirst({
             where: {
               doctorId,
@@ -112,7 +112,7 @@ export class AppointmentsService {
       while (cursor.getTime() + SLOT_INTERVAL_MINUTES * 60000 <= blockEnd.getTime()) {
         const slotEnd = new Date(cursor.getTime() + SLOT_INTERVAL_MINUTES * 60000);
 
-        const overlaps = existingAppointments.some(appt => {
+        const overlaps = existingAppointments.some((appt) => {
           const apptStart = appt.scheduledAt.getTime();
           const apptEnd = apptStart + appt.durationMinutes * 60000;
           return cursor.getTime() < apptEnd && slotEnd.getTime() > apptStart;
@@ -146,7 +146,7 @@ export class AppointmentsService {
   async reschedule(id: number, scheduledAt: string) {
     const appointment = await this.findOne(id);
 
-    return await this.prisma.$transaction(async tx => {
+    return await this.prisma.$transaction(async (tx) => {
       const conflicting = await tx.appointment.findFirst({
         where: {
           id: { not: id },

@@ -4,8 +4,20 @@ import globals from "globals";
 
 export default tseslint.config(
   {
-    ignores: ["eslint.config.mjs"],
+    ignores: [
+      "eslint.config.mjs",
+      "dist/**",
+      "src/app/**",
+      "src/environments/**",
+      "src/testing/**",
+      "src/test.ts",
+      "src/test-setup.ts",
+    ],
+  },
+  {
+    files: ["src/**/*.ts", "test/**/*.ts"],
     languageOptions: {
+      parser: tseslint.parser,
       globals: { ...globals.node, ...globals.jest },
       ecmaVersion: 2022,
       sourceType: "module",

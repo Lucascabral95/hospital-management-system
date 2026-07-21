@@ -5,6 +5,7 @@ import { JwtService } from "@nestjs/jwt";
 import { RoleAccess } from "@prisma/client";
 import { PaginationDto } from "src/common/dto/pagination.dto";
 import { PrismaService } from "../prisma/prisma.service";
+import { RefreshTokenService, RefreshMeta } from "./refresh-token.service";
 
 @Injectable()
 export class AuthService {
@@ -13,6 +14,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly refreshTokenService: RefreshTokenService,
   ) {
     this.logger.log("Connected to database");
   }
@@ -32,6 +34,7 @@ export class AuthService {
       skip: (page - 1) * limit,
       take: limit,
       orderBy: { [sortedParameter]: sortedOrder },
+      omit: { password: true },
       include: {
         Doctor: true,
       },
@@ -45,7 +48,7 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, meta: RefreshMeta = {}) {
     const { email, password } = loginDto;
 
     const user = await this.prisma.auth.findUnique({
@@ -72,14 +75,55 @@ export class AuthService {
       is_active: user.is_active,
     };
 
+    const { token: refreshToken, expiresAt: refreshExpiresAt } = await this.refreshTokenService.issue(user.id, meta);
+
     return {
       message: "Login successful",
       token: this.getJwtToken(payload),
+      refreshToken,
+      refreshExpiresAt,
+      user: { id: user.id, full_name: user.full_name, email: user.email, role: user.role, is_active: user.is_active },
     };
   }
 
+  async refresh(rawRefreshToken: string, meta: RefreshMeta = {}) {
+    const {
+      authId,
+      token: refreshToken,
+      expiresAt: refreshExpiresAt,
+    } = await this.refreshTokenService.rotate(rawRefreshToken, meta);
+
+    const user = await this.prisma.auth.findUnique({ where: { id: authId } });
+    if (!user || user.is_active === false) {
+      throw new BadRequestException("User is inactive or not found");
+    }
+
+    const payload = {
+      id: user.id,
+      full_name: user.full_name,
+      email: user.email,
+      role: user.role as RoleAccess,
+      is_active: user.is_active,
+    };
+
+    return {
+      token: this.getJwtToken(payload),
+      refreshToken,
+      refreshExpiresAt,
+    };
+  }
+
+  async logout(rawRefreshToken: string | undefined): Promise<void> {
+    if (!rawRefreshToken) return;
+    await this.refreshTokenService.revoke(rawRefreshToken);
+  }
+
+  async me(id: number) {
+    return this.findOne(id);
+  }
+
   getJwtToken(payload: PayloadJwtDto): string {
-    const token = this.jwtService.sign(payload);
+    const token = this.jwtService.sign({ ...payload, type: "access" });
     return token;
   }
 
@@ -106,6 +150,7 @@ export class AuthService {
           email: emailLowerCase,
           ...rest,
         },
+        omit: { password: true },
       });
 
       return createdUser;
@@ -117,6 +162,7 @@ export class AuthService {
   async findOne(id: number) {
     const userById = await this.prisma.auth.findFirst({
       where: { id },
+      omit: { password: true },
       include: {
         Doctor: true,
       },
@@ -139,7 +185,12 @@ export class AuthService {
     const updateUser = await this.prisma.auth.update({
       where: { id },
       data: updateAuthDto,
+      omit: { password: true },
     });
+
+    if (updateAuthDto.password || updateAuthDto.is_active === false) {
+      await this.refreshTokenService.revokeAllForUser(id);
+    }
 
     return {
       message: "User updated successfully",

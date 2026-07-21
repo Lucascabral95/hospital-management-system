@@ -82,12 +82,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyDoctorOfAppointment(
-    doctorId: number,
-    appointmentId: number,
-    title: string,
-    body: string,
-  ) {
+  async notifyDoctorOfAppointment(doctorId: number, appointmentId: number, title: string, body: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: doctorId },
       select: { authId: true },

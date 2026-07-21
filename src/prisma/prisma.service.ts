@@ -1,13 +1,15 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnApplicationShutdown, OnModuleInit } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
+import { envs } from "src/config/envs";
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+export class PrismaService extends PrismaClient implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger("PrismaService");
 
   constructor() {
     super({
-      log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+      datasourceUrl: envs.databaseUrl,
+      log: envs.nodeEnv === "development" ? ["warn", "error"] : ["error"],
     });
   }
 
@@ -16,7 +18,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     this.logger.log("Connected to database");
   }
 
-  async onModuleDestroy() {
+  // Deliberadamente en onApplicationShutdown (no onModuleDestroy): Nest cierra el server HTTP y
+  // dispara beforeApplicationShutdown en los gateways de socket ANTES de este hook, así que los
+  // handlers en vuelo siguen teniendo una conexión a Prisma viva mientras se drenan.
+  async onApplicationShutdown() {
     await this.$disconnect();
   }
 }

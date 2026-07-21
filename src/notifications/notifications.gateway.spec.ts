@@ -1,13 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { UnauthorizedException } from "@nestjs/common";
 import { NotificationsGateway } from "./notifications.gateway";
-import { JwtService } from "@nestjs/jwt";
-import { AuthService } from "src/auth/auth.service";
+import { AccessTokenVerifier } from "src/auth/services/access-token-verifier.service";
 import { Server, Socket } from "socket.io";
 
 describe("NotificationsGateway", () => {
   let gateway: NotificationsGateway;
-  let jwtService: { verify: jest.Mock };
-  let authService: { findOne: jest.Mock };
+  let accessTokenVerifier: { verifyAccess: jest.Mock };
 
   const mockServer = {
     to: jest.fn().mockReturnThis(),
@@ -24,15 +23,10 @@ describe("NotificationsGateway", () => {
     }) as unknown as Socket;
 
   beforeEach(async () => {
-    jwtService = { verify: jest.fn() };
-    authService = { findOne: jest.fn() };
+    accessTokenVerifier = { verifyAccess: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        NotificationsGateway,
-        { provide: JwtService, useValue: jwtService },
-        { provide: AuthService, useValue: authService },
-      ],
+      providers: [NotificationsGateway, { provide: AccessTokenVerifier, useValue: accessTokenVerifier }],
     }).compile();
 
     gateway = module.get<NotificationsGateway>(NotificationsGateway);
@@ -54,13 +48,12 @@ describe("NotificationsGateway", () => {
       await gateway.handleConnection(client);
 
       expect(client.disconnect).toHaveBeenCalled();
-      expect(jwtService.verify).not.toHaveBeenCalled();
+      expect(accessTokenVerifier.verifyAccess).not.toHaveBeenCalled();
     });
 
     it("should join the user room for a valid, active user", async () => {
       const client = buildSocket({ handshake: { auth: { token: "abc" }, headers: {} } as any });
-      jwtService.verify.mockReturnValue({ id: 7 });
-      authService.findOne.mockResolvedValue({ id: 7, is_active: true });
+      accessTokenVerifier.verifyAccess.mockResolvedValue({ id: 7 });
 
       await gateway.handleConnection(client);
 
@@ -70,9 +63,7 @@ describe("NotificationsGateway", () => {
 
     it("should disconnect when the token is invalid", async () => {
       const client = buildSocket({ handshake: { auth: { token: "bad" }, headers: {} } as any });
-      jwtService.verify.mockImplementation(() => {
-        throw new Error("invalid token");
-      });
+      accessTokenVerifier.verifyAccess.mockRejectedValue(new UnauthorizedException("Invalid or expired token"));
 
       await gateway.handleConnection(client);
 
@@ -81,8 +72,9 @@ describe("NotificationsGateway", () => {
 
     it("should disconnect when the user is inactive", async () => {
       const client = buildSocket({ handshake: { auth: { token: "abc" }, headers: {} } as any });
-      jwtService.verify.mockReturnValue({ id: 7 });
-      authService.findOne.mockResolvedValue({ id: 7, is_active: false });
+      accessTokenVerifier.verifyAccess.mockRejectedValue(
+        new UnauthorizedException("User is inactive, talk with an admin"),
+      );
 
       await gateway.handleConnection(client);
 
@@ -94,12 +86,11 @@ describe("NotificationsGateway", () => {
       const client = buildSocket({
         handshake: { auth: {}, headers: { authorization: "Bearer xyz" } } as any,
       });
-      jwtService.verify.mockReturnValue({ id: 3 });
-      authService.findOne.mockResolvedValue({ id: 3, is_active: true });
+      accessTokenVerifier.verifyAccess.mockResolvedValue({ id: 3 });
 
       await gateway.handleConnection(client);
 
-      expect(jwtService.verify).toHaveBeenCalledWith("xyz");
+      expect(accessTokenVerifier.verifyAccess).toHaveBeenCalledWith("xyz");
       expect(client.join).toHaveBeenCalledWith("user:3");
     });
   });

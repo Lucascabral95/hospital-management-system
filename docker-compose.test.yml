@@ -1,0 +1,17 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: hms-postgres-test
+    environment:
+      POSTGRES_USER: hms_test
+      POSTGRES_PASSWORD: hms_test
+      POSTGRES_DB: hms_test
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hms_test -d hms_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

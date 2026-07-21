@@ -58,8 +58,10 @@ describe("AppController", () => {
   });
 
   describe("health", () => {
+    const buildRes = () => ({ status: jest.fn() }) as any;
+
     it("should return health status object", () => {
-      const result = controller.health();
+      const result = controller.health(buildRes());
 
       expect(result).toHaveProperty("status", "ok");
       expect(result).toHaveProperty("timestamp");

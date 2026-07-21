@@ -12,23 +12,24 @@ import { MedicalRecordsModule } from "./medical-records/medical-records.module";
 import { PrescriptionsModule } from "./prescriptions/prescriptions.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { RealtimeModule } from "./realtime/realtime.module";
-import { IntermentModule } from './interment/interment.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { AnalyticsModule } from './analytics/analytics.module';
+import { IntermentModule } from "./interment/interment.module";
+import { PrismaModule } from "./prisma/prisma.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { AnalyticsModule } from "./analytics/analytics.module";
+import { envs } from "./config/envs";
 
 @Module({
   imports: [
     PrismaModule,
     ThrottlerModule.forRoot([
       {
-        ttl: 60000,
-        limit: 200,
+        ttl: envs.throttleTtl,
+        limit: envs.throttleLimit,
       },
     ]),
     CacheModule.register({
       isGlobal: true,
-      ttl: 30000,
+      ttl: envs.cacheTtl,
     }),
     ScheduleModule.forRoot(),
     AuthModule,

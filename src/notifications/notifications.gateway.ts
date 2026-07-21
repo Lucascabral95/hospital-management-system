@@ -1,9 +1,7 @@
 import { WebSocketGateway, WebSocketServer, OnGatewayConnection } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
-import { Logger } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
-import { AuthService } from "src/auth/auth.service";
-import { PayloadJwtDto } from "src/auth/dto";
+import { BeforeApplicationShutdown, Logger } from "@nestjs/common";
+import { AccessTokenVerifier } from "src/auth/services/access-token-verifier.service";
 import { envs } from "src/config/envs";
 
 @WebSocketGateway({
@@ -14,15 +12,20 @@ import { envs } from "src/config/envs";
   },
   transports: ["websocket"],
 })
-export class NotificationsGateway implements OnGatewayConnection {
+export class NotificationsGateway implements OnGatewayConnection, BeforeApplicationShutdown {
   private readonly logger = new Logger("NotificationsGateway");
 
   @WebSocketServer() server: Server;
 
-  constructor(
-    private readonly jwtService: JwtService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly accessTokenVerifier: AccessTokenVerifier) {}
+
+  // Nest ya cierra el server de Socket.IO subyacente como parte de su propio ciclo de shutdown
+  // (vía el IoAdapter); acá sólo avisamos a los clientes y los desconectamos antes de que eso pase.
+  beforeApplicationShutdown() {
+    if (!this.server) return;
+    this.server.emit("server:shutdown");
+    this.server.disconnectSockets(true);
+  }
 
   async handleConnection(client: Socket) {
     const token = this.extractToken(client);
@@ -33,14 +36,7 @@ export class NotificationsGateway implements OnGatewayConnection {
     }
 
     try {
-      const payload = this.jwtService.verify<PayloadJwtDto>(token);
-      const user = await this.authService.findOne(payload.id);
-
-      if (!user || user.is_active === false) {
-        client.disconnect();
-        return;
-      }
-
+      const payload = await this.accessTokenVerifier.verifyAccess(token);
       client.data.authId = payload.id;
       await client.join(`user:${payload.id}`);
     } catch {

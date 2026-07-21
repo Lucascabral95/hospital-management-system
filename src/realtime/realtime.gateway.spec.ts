@@ -2,8 +2,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { RealtimeGateway } from "./realtime.gateway";
 import { RealtimeService } from "./realtime.service";
 import { WsJwtGuard } from "./guards/ws-jwt.guard";
-import { JwtService } from "@nestjs/jwt";
-import { AuthService } from "src/auth/auth.service";
+import { AccessTokenVerifier } from "src/auth/services/access-token-verifier.service";
 import { AppointmentsService } from "src/appointments/appointments.service";
 import { NotificationsService } from "src/notifications/notifications.service";
 import { CreateAppointmentSocketDto } from "./dto";
@@ -50,8 +49,7 @@ describe("RealtimeGateway", () => {
         { provide: AppointmentsService, useValue: mockAppointmentsService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         WsJwtGuard,
-        { provide: JwtService, useValue: { verify: jest.fn() } },
-        { provide: AuthService, useValue: { findOne: jest.fn() } },
+        { provide: AccessTokenVerifier, useValue: { verifyAccess: jest.fn() } },
       ],
     }).compile();
 

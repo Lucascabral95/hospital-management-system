@@ -1,16 +1,11 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { WsException } from "@nestjs/websockets";
-import { JwtService } from "@nestjs/jwt";
 import { Socket } from "socket.io";
-import { AuthService } from "src/auth/auth.service";
-import { PayloadJwtDto } from "src/auth/dto";
+import { AccessTokenVerifier } from "src/auth/services/access-token-verifier.service";
 
 @Injectable()
 export class WsJwtGuard implements CanActivate {
-  constructor(
-    private readonly jwtService: JwtService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly accessTokenVerifier: AccessTokenVerifier) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client = context.switchToWs().getClient<Socket>();
@@ -20,20 +15,13 @@ export class WsJwtGuard implements CanActivate {
       throw new WsException("Missing authentication token");
     }
 
-    let payload: PayloadJwtDto;
     try {
-      payload = this.jwtService.verify<PayloadJwtDto>(token);
-    } catch {
-      throw new WsException("Invalid or expired token");
+      const payload = await this.accessTokenVerifier.verifyAccess(token);
+      client.data.user = payload;
+    } catch (error) {
+      throw new WsException(error instanceof UnauthorizedException ? error.message : "Invalid or expired token");
     }
 
-    const user = await this.authService.findOne(payload.id).catch(() => null);
-
-    if (!user || user.is_active === false) {
-      throw new WsException("User is inactive or not found");
-    }
-
-    client.data.user = payload;
     return true;
   }
 

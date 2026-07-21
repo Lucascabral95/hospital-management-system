@@ -127,9 +127,7 @@ describe("DoctorsService", () => {
       const result = await service.findAll(paginationDto);
 
       expect(mockPrismaService.doctor.count).toHaveBeenCalledTimes(1);
-      expect(mockPrismaService.doctor.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 0, take: 10 }),
-      );
+      expect(mockPrismaService.doctor.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 0, take: 10 }));
       expect(result).toEqual({
         totalPage: 2,
         page: 1,
@@ -146,9 +144,7 @@ describe("DoctorsService", () => {
 
       const result = await service.findOne(1);
 
-      expect(mockPrismaService.doctor.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 1 } }),
-      );
+      expect(mockPrismaService.doctor.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 1 } }));
       expect(result).toEqual(doctor);
     });
 

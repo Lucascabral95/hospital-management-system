@@ -1,5 +1,12 @@
 set -e
 
+echo "[pre-commit] Corriendo tests unitarios (npm run test:unit)..."
+if ! npm run test:unit; then
+  echo ""
+  echo "[pre-commit] Los tests unitarios fallaron. Commit cancelado."
+  exit 1
+fi
+
 echo "[pre-commit] Compilando el proyecto (npm run build)..."
 if ! npm run build; then
   echo ""

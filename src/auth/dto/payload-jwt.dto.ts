@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsNumber, IsString } from "class-validator";
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
 import { RoleAccess } from "@prisma/client";
 
 export class PayloadJwtDto {
@@ -18,4 +18,8 @@ export class PayloadJwtDto {
 
   @IsBoolean()
   is_active: boolean;
+
+  @IsOptional()
+  @IsIn(["access"])
+  type?: "access";
 }

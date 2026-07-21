@@ -5,10 +5,12 @@ import { JwtModule } from "@nestjs/jwt";
 import { envs } from "src/config/envs";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { PassportModule } from "@nestjs/passport";
+import { RefreshTokenService } from "./refresh-token.service";
+import { AccessTokenVerifier } from "./services/access-token-verifier.service";
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, RefreshTokenService, AccessTokenVerifier],
   imports: [
     PassportModule.register({
       defaultStrategy: "jwt",
@@ -16,9 +18,9 @@ import { PassportModule } from "@nestjs/passport";
 
     JwtModule.register({
       secret: envs.secretJwt,
-      signOptions: { expiresIn: "720h" },
+      signOptions: { expiresIn: envs.jwtAccessExpiresIn },
     }),
   ],
-  exports: [AuthService, AuthModule, JwtStrategy, JwtModule, PassportModule, AuthModule],
+  exports: [AuthService, JwtStrategy, JwtModule, PassportModule, RefreshTokenService, AccessTokenVerifier],
 })
 export class AuthModule {}
