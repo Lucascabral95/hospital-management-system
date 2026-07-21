@@ -46,8 +46,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # envs.ts valida las vars de entorno en import-time (Joi), así que hasta los tests unitarios
+      # (que mockean Prisma y nunca pegan a la DB de verdad) necesitan que existan PORT, SECRET_JWT, etc.
       - name: Unit tests
-        run: npm run test:unit -- --ci --coverage
+        run: npx dotenv -e .env.test -- npm run test:unit -- --ci --coverage
 
       # test:e2e apunta a localhost:55432 vía .env.test — el mismo puerto que expone el
       # service container de arriba, así que es el mismo comando que se corre en local.
