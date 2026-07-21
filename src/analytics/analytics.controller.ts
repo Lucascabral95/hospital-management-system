@@ -16,4 +16,16 @@ export class AnalyticsController {
   getOverview(@AdminAndDoctors() user: string, @Query() analyticsRangeDto: AnalyticsRangeDto) {
     return this.analyticsService.getOverview(analyticsRangeDto.days);
   }
+
+  @Get("insights")
+  @ApiResponse({ status: 200, description: "Operational insights: KPI deltas, peak hours, doctor performance, no-show risk" })
+  getInsights(@AdminAndDoctors() user: string, @Query() analyticsRangeDto: AnalyticsRangeDto) {
+    return this.analyticsService.getInsights(analyticsRangeDto.days);
+  }
+
+  @Get("no-show-risk")
+  @ApiResponse({ status: 200, description: "No-show risk levels for upcoming appointments (next 7 days)" })
+  getNoShowRisk(@AdminAndDoctors() user: string) {
+    return this.analyticsService.getNoShowRisk();
+  }
 }

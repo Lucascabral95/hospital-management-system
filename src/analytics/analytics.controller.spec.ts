@@ -8,6 +8,8 @@ describe("AnalyticsController", () => {
 
   const mockAnalyticsService = {
     getOverview: jest.fn(),
+    getInsights: jest.fn(),
+    getNoShowRisk: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -36,6 +38,30 @@ describe("AnalyticsController", () => {
       const result = await controller.getOverview("admin", { days: 30 });
 
       expect(service.getOverview).toHaveBeenCalledWith(30);
+      expect(result).toEqual(expected);
+    });
+  });
+
+  describe("getInsights", () => {
+    it("should call service.getInsights with the requested day range", async () => {
+      const expected = { kpis: {} };
+      mockAnalyticsService.getInsights.mockResolvedValue(expected);
+
+      const result = await controller.getInsights("admin", { days: 30 });
+
+      expect(service.getInsights).toHaveBeenCalledWith(30);
+      expect(result).toEqual(expected);
+    });
+  });
+
+  describe("getNoShowRisk", () => {
+    it("should call service.getNoShowRisk", async () => {
+      const expected = [{ appointmentId: 1, riskLevel: "HIGH" }];
+      mockAnalyticsService.getNoShowRisk.mockResolvedValue(expected);
+
+      const result = await controller.getNoShowRisk("admin");
+
+      expect(service.getNoShowRisk).toHaveBeenCalled();
       expect(result).toEqual(expected);
     });
   });
