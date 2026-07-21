@@ -1,12 +1,18 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { RealtimeGateway } from "./realtime.gateway";
 import { RealtimeService } from "./realtime.service";
+import { WsJwtGuard } from "./guards/ws-jwt.guard";
+import { JwtService } from "@nestjs/jwt";
+import { AuthService } from "src/auth/auth.service";
+import { AppointmentsService } from "src/appointments/appointments.service";
+import { NotificationsService } from "src/notifications/notifications.service";
 import { CreateAppointmentSocketDto } from "./dto";
 import { Server, Socket } from "socket.io";
 
 describe("RealtimeGateway", () => {
   let gateway: RealtimeGateway;
   let service: RealtimeService;
+  let appointmentsService: AppointmentsService;
 
   const mockRealtimeService = {
     create: jest.fn(),
@@ -14,6 +20,15 @@ describe("RealtimeGateway", () => {
     updateStatusInProgress: jest.fn(),
     updateStatusCompleted: jest.fn(),
     remove: jest.fn(),
+  };
+
+  const mockAppointmentsService = {
+    cancel: jest.fn(),
+    reschedule: jest.fn(),
+  };
+
+  const mockNotificationsService = {
+    notifyDoctorOfAppointment: jest.fn().mockResolvedValue(null),
   };
 
   // Mock del servidor WebSocket (this.server)
@@ -29,11 +44,20 @@ describe("RealtimeGateway", () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RealtimeGateway, { provide: RealtimeService, useValue: mockRealtimeService }],
+      providers: [
+        RealtimeGateway,
+        { provide: RealtimeService, useValue: mockRealtimeService },
+        { provide: AppointmentsService, useValue: mockAppointmentsService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
+        WsJwtGuard,
+        { provide: JwtService, useValue: { verify: jest.fn() } },
+        { provide: AuthService, useValue: { findOne: jest.fn() } },
+      ],
     }).compile();
 
     gateway = module.get<RealtimeGateway>(RealtimeGateway);
     service = module.get<RealtimeService>(RealtimeService);
+    appointmentsService = module.get<AppointmentsService>(AppointmentsService);
 
     // Asignamos el mock del servidor a la propiedad del gateway
     gateway.server = mockServer as unknown as Server;
@@ -67,9 +91,9 @@ describe("RealtimeGateway", () => {
   });
 
   describe("create", () => {
-    it("should create appointment and emit event", async () => {
-      const dto: CreateAppointmentSocketDto = { patientsId: 1, doctorId: 2 } as any;
-      const created = { id: 1, ...dto };
+    it("should create appointment, emit event and notify the assigned doctor", async () => {
+      const dto: CreateAppointmentSocketDto = { patientsId: 1, doctorId: 2, specialty: "Cardiology" } as any;
+      const created = { id: 1, ...dto, scheduledAt: new Date() };
 
       mockRealtimeService.create.mockResolvedValue(created);
 
@@ -78,7 +102,24 @@ describe("RealtimeGateway", () => {
       expect(service.create).toHaveBeenCalledWith(dto);
       // Verifica que emita a todos los clientes
       expect(mockServer.emit).toHaveBeenCalledWith("createdAppointments", created);
+      expect(mockNotificationsService.notifyDoctorOfAppointment).toHaveBeenCalledWith(
+        2,
+        1,
+        expect.any(String),
+        expect.any(String),
+      );
       expect(result).toEqual(created);
+    });
+
+    it("should not attempt to notify when the appointment has no doctor assigned", async () => {
+      const dto: CreateAppointmentSocketDto = { patientsId: 1 } as any;
+      const created = { id: 1, ...dto, doctorId: null };
+
+      mockRealtimeService.create.mockResolvedValue(created);
+
+      await gateway.create(dto);
+
+      expect(mockNotificationsService.notifyDoctorOfAppointment).not.toHaveBeenCalled();
     });
   });
 
@@ -135,6 +176,34 @@ describe("RealtimeGateway", () => {
       expect(mockServer.emit).toHaveBeenCalledWith("deletedAppointment", id);
       expect(service.remove).toHaveBeenCalledWith(id);
       expect(result).toEqual(response);
+    });
+  });
+
+  describe("cancel", () => {
+    it("should cancel appointment and emit event", async () => {
+      const id = 1;
+      const updated = { id, status: "CANCELLED" };
+      mockAppointmentsService.cancel.mockResolvedValue(updated);
+
+      const result = await gateway.cancel(id);
+
+      expect(appointmentsService.cancel).toHaveBeenCalledWith(id);
+      expect(mockServer.emit).toHaveBeenCalledWith("cancelledAppointment", id);
+      expect(result).toEqual(updated);
+    });
+  });
+
+  describe("reschedule", () => {
+    it("should reschedule appointment and emit event", async () => {
+      const payload = { id: 1, scheduledAt: "2026-08-02T11:00:00.000Z" };
+      const updated = { id: 1, status: "SCHEDULED", scheduledAt: payload.scheduledAt };
+      mockAppointmentsService.reschedule.mockResolvedValue(updated);
+
+      const result = await gateway.reschedule(payload);
+
+      expect(appointmentsService.reschedule).toHaveBeenCalledWith(payload.id, payload.scheduledAt);
+      expect(mockServer.emit).toHaveBeenCalledWith("rescheduledAppointment", updated);
+      expect(result).toEqual(updated);
     });
   });
 });

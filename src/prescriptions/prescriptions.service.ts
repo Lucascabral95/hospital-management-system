@@ -1,17 +1,16 @@
-import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { CreatePrescriptionDto, UpdatePrescriptionDto } from "./dto";
-import { PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { MedicalRecordsService } from "src/medical-records/medical-records.service";
+import { PrismaService } from "src/prisma/prisma.service";
+import { PaginationDto } from "src/common/dto/pagination.dto";
 
 @Injectable()
-export class PrescriptionsService extends PrismaClient implements OnModuleInit {
-  constructor(private readonly medicalRecordsService: MedicalRecordsService) {
-    super();
-  }
-
-  onModuleInit() {
-    this.$connect();
-  }
+export class PrescriptionsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly medicalRecordsService: MedicalRecordsService,
+  ) {}
 
   async create(createPrescriptionDto: CreatePrescriptionDto) {
     const findMedicalRecord = await this.medicalRecordsService.findOne(createPrescriptionDto.medicalRecordId);
@@ -20,21 +19,36 @@ export class PrescriptionsService extends PrismaClient implements OnModuleInit {
       throw new NotFoundException(`MedicalRecord #${createPrescriptionDto.medicalRecordId} not found`);
     }
 
-    return await this.prescriptions.create({
+    return await this.prisma.prescriptions.create({
       data: createPrescriptionDto,
     });
   }
 
-  async findAll() {
-    return await this.prescriptions.findMany({
-      include: {
-        MedicalRecord: true,
-      },
-    });
+  async findAll(paginationDto: PaginationDto) {
+    const { page, limit } = paginationDto;
+
+    const [total, prescriptions] = await Promise.all([
+      this.prisma.prescriptions.count(),
+      this.prisma.prescriptions.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          MedicalRecord: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    return {
+      totalPage: Math.ceil(total / limit),
+      page,
+      total,
+      data: prescriptions,
+    };
   }
 
   async findOne(id: number) {
-    const findPrescriptionById = await this.prescriptions.findUnique({
+    const findPrescriptionById = await this.prisma.prescriptions.findUnique({
       where: { id },
     });
 
@@ -46,31 +60,41 @@ export class PrescriptionsService extends PrismaClient implements OnModuleInit {
   }
 
   async update(id: number, updatePrescriptionDto: UpdatePrescriptionDto) {
-    await this.findOne(id);
+    try {
+      const updatedPrescription = await this.prisma.prescriptions.update({
+        where: { id },
+        data: updatePrescriptionDto,
+      });
 
-    const updatedPrescription = await this.prescriptions.update({
-      where: { id },
-      data: updatePrescriptionDto,
-    });
-
-    return {
-      message: "Prescription updated successfully",
-      updatedPrescription,
-    };
+      return {
+        message: "Prescription updated successfully",
+        updatedPrescription,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException("Prescription not found");
+      }
+      throw error;
+    }
   }
 
   async remove(id: number) {
-    await this.findOne(id);
+    try {
+      const deletedPrescription = await this.prisma.prescriptions.delete({
+        where: {
+          id,
+        },
+      });
 
-    const deletedPrescription = await this.prescriptions.delete({
-      where: {
-        id,
-      },
-    });
-
-    return {
-      message: "Prescription deleted successfully",
-      deletedPrescription,
-    };
+      return {
+        message: "Prescription deleted successfully",
+        deletedPrescription,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException("Prescription not found");
+      }
+      throw error;
+    }
   }
 }

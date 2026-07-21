@@ -59,15 +59,16 @@ describe("MedicalRecordsController", () => {
   });
 
   describe("findAll", () => {
-    it("should call service.findAll", async () => {
+    it("should call service.findAll with paginationDto", async () => {
       const mockUser = "user-id";
-      const expectedResult = [{ id: 1 }];
+      const paginationDto: PaginationDto = { page: 1, limit: 10 } as any;
+      const expectedResult = { data: [], totalPage: 1 };
 
       mockMedicalRecordsService.findAll.mockResolvedValue(expectedResult);
 
-      const result = await controller.findAll(mockUser);
+      const result = await controller.findAll(mockUser, paginationDto);
 
-      expect(service.findAll).toHaveBeenCalled();
+      expect(service.findAll).toHaveBeenCalledWith(paginationDto);
       expect(result).toEqual(expectedResult);
     });
   });

@@ -15,7 +15,7 @@ import { CreateDoctorDto } from "./dto/create-doctor.dto";
 import { UpdateDoctorDto } from "./dto/update-doctor.dto";
 import { PaginationDto } from "src/common/dto/pagination.dto";
 import { ApiResponse, ApiTags } from "@nestjs/swagger";
-import { GetDoctorDto, GetResourcesDto } from "./dto";
+import { CreateAvailabilityDto, GetDoctorDto, GetResourcesDto } from "./dto";
 import { GetPatientsOfDoctorByIDDto } from "./dto/get-patients-of-doctor-by-id.dto";
 import { AuthGuard } from "@nestjs/passport";
 import { AdminAndDoctors } from "src/auth/decorators/get-user.decorator";
@@ -66,6 +66,29 @@ export class DoctorsController {
   @ApiResponse({ status: 500, description: "Internal server error" })
   findPatientsOfDoctorById(@AdminAndDoctors() user: string, @Param("id") doctorId: number) {
     return this.doctorsService.findPatientsOfDoctorById(+doctorId);
+  }
+
+  @Get(":id/availability")
+  getAvailability(@AdminAndDoctors() user: string, @Param("id") doctorId: string) {
+    return this.doctorsService.getAvailability(+doctorId);
+  }
+
+  @Post(":id/availability")
+  addAvailability(
+    @AdminAndDoctors() user: string,
+    @Param("id") doctorId: string,
+    @Body() createAvailabilityDto: CreateAvailabilityDto,
+  ) {
+    return this.doctorsService.addAvailability(+doctorId, createAvailabilityDto);
+  }
+
+  @Delete(":id/availability/:availabilityId")
+  removeAvailability(
+    @AdminAndDoctors() user: string,
+    @Param("id") doctorId: string,
+    @Param("availabilityId") availabilityId: string,
+  ) {
+    return this.doctorsService.removeAvailability(+doctorId, +availabilityId);
   }
 
   @Get(":id")

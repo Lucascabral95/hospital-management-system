@@ -1,15 +1,16 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { IntermentService } from "./interment.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { PaginationDto } from "../common/dto/pagination.dto";
 import { CreateIntermentDto, CreateDiagnosisDto } from "./dto/create-interment.dto";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
-import { Status } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 import { PatchDiagnosisDto, UpdateIntermentDto } from "./dto";
 
 describe("IntermentService", () => {
   let service: IntermentService;
 
-  const mockPrismaClient = {
+  const mockPrismaService = {
     interment: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -20,19 +21,18 @@ describe("IntermentService", () => {
     },
     diagnosis: {
       findMany: jest.fn(),
+      count: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
     },
-    $connect: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [IntermentService],
+      providers: [IntermentService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
 
     service = module.get<IntermentService>(IntermentService);
-    Object.assign(service, mockPrismaClient);
   });
 
   afterEach(() => {
@@ -52,11 +52,11 @@ describe("IntermentService", () => {
       } as any;
 
       const mockResult = { id: 1, ...dto };
-      mockPrismaClient.interment.create.mockResolvedValue(mockResult);
+      mockPrismaService.interment.create.mockResolvedValue(mockResult);
 
       const result = await service.create(dto);
 
-      expect(service.interment.create).toHaveBeenCalledWith(
+      expect(mockPrismaService.interment.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             Diagnosis: expect.any(Object),
@@ -72,7 +72,7 @@ describe("IntermentService", () => {
     });
 
     it("should throw BadRequestException on error", async () => {
-      mockPrismaClient.interment.create.mockRejectedValue(new Error("DB error"));
+      mockPrismaService.interment.create.mockRejectedValue(new Error("DB error"));
 
       await expect(service.create({} as CreateIntermentDto)).rejects.toThrow(BadRequestException);
     });
@@ -83,13 +83,13 @@ describe("IntermentService", () => {
       const paginationDto: PaginationDto = { page: 1, limit: 10 } as any;
       const mockData = [{ id: 1 }];
 
-      mockPrismaClient.interment.count.mockResolvedValue(15);
-      mockPrismaClient.interment.findMany.mockResolvedValue(mockData);
+      mockPrismaService.interment.count.mockResolvedValue(15);
+      mockPrismaService.interment.findMany.mockResolvedValue(mockData);
 
       const result = await service.findAll(paginationDto);
 
-      expect(service.interment.count).toHaveBeenCalled();
-      expect(service.interment.findMany).toHaveBeenCalledWith(
+      expect(mockPrismaService.interment.count).toHaveBeenCalled();
+      expect(mockPrismaService.interment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           skip: 0,
           take: 10,
@@ -110,11 +110,11 @@ describe("IntermentService", () => {
   describe("findOne", () => {
     it("should return interment if found", async () => {
       const mockInterment = { id: 1 };
-      mockPrismaClient.interment.findUnique.mockResolvedValue(mockInterment);
+      mockPrismaService.interment.findUnique.mockResolvedValue(mockInterment);
 
       const result = await service.findOne(1);
 
-      expect(service.interment.findUnique).toHaveBeenCalledWith(
+      expect(mockPrismaService.interment.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 1 },
           include: expect.any(Object),
@@ -124,15 +124,15 @@ describe("IntermentService", () => {
       expect(result).toEqual(mockInterment);
     });
 
-    it("should throw BadRequestException if not found", async () => {
-      mockPrismaClient.interment.findUnique.mockResolvedValue(null);
+    it("should throw NotFoundException if not found", async () => {
+      mockPrismaService.interment.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne(999)).rejects.toThrow(BadRequestException);
+      await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
       await expect(service.findOne(999)).rejects.toThrow("Interment #999 not found");
     });
 
     it("should throw BadRequestException on error", async () => {
-      mockPrismaClient.interment.findUnique.mockRejectedValue(new Error("DB error"));
+      mockPrismaService.interment.findUnique.mockRejectedValue(new Error("DB error"));
 
       await expect(service.findOne(1)).rejects.toThrow(BadRequestException);
     });
@@ -161,15 +161,13 @@ describe("IntermentService", () => {
 
   describe("updateStatus", () => {
     it("should update interment status", async () => {
-      jest.spyOn(service, "findOne").mockResolvedValue({ id: 1 } as any);
       const mockUpdateStatus = { id: 1, status: Status.COMPLETED };
 
-      mockPrismaClient.interment.update.mockResolvedValue(mockUpdateStatus);
+      mockPrismaService.interment.update.mockResolvedValue(mockUpdateStatus);
 
       const result = await service.updateStatus(1, Status.COMPLETED);
 
-      expect(service.findOne).toHaveBeenCalledWith(1);
-      expect(service.interment.update).toHaveBeenCalledWith(
+      expect(mockPrismaService.interment.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 1 },
           data: expect.objectContaining({ status: Status.COMPLETED }),
@@ -183,9 +181,18 @@ describe("IntermentService", () => {
       });
     });
 
-    it("should throw BadRequestException on error", async () => {
-      jest.spyOn(service, "findOne").mockResolvedValue({ id: 1 } as any);
-      mockPrismaClient.interment.update.mockRejectedValue(new Error("DB error"));
+    it("should throw NotFoundException when interment does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.interment.update.mockRejectedValue(prismaError);
+
+      await expect(service.updateStatus(999, Status.PENDING)).rejects.toThrow(NotFoundException);
+    });
+
+    it("should throw BadRequestException on other errors", async () => {
+      mockPrismaService.interment.update.mockRejectedValue(new Error("DB error"));
 
       await expect(service.updateStatus(1, Status.PENDING)).rejects.toThrow(BadRequestException);
     });
@@ -193,17 +200,14 @@ describe("IntermentService", () => {
 
   describe("updateDiagnosisById", () => {
     it("should update diagnosis", async () => {
-      jest.spyOn(service, "getDiagnosisById").mockResolvedValue({ id: 1 } as any);
-
       const dto: PatchDiagnosisDto = { description: "updated" } as any;
       const mockUpdatedDiagnosis = { id: 1, description: "updated" };
 
-      mockPrismaClient.diagnosis.update.mockResolvedValue(mockUpdatedDiagnosis);
+      mockPrismaService.diagnosis.update.mockResolvedValue(mockUpdatedDiagnosis);
 
       const result = await service.updateDiagnosisById(1, dto);
 
-      expect(service.getDiagnosisById).toHaveBeenCalledWith(1);
-      expect(service.diagnosis.update).toHaveBeenCalledWith(
+      expect(mockPrismaService.diagnosis.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 1 },
           data: dto,
@@ -216,24 +220,36 @@ describe("IntermentService", () => {
       });
     });
 
-    it("should throw BadRequestException on error", async () => {
-      jest.spyOn(service, "getDiagnosisById").mockResolvedValue({ id: 1 } as any);
-      mockPrismaClient.diagnosis.update.mockRejectedValue(new Error("DB error"));
+    it("should throw NotFoundException when diagnosis does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.diagnosis.update.mockRejectedValue(prismaError);
 
-      await expect(service.updateDiagnosisById(1, {} as PatchDiagnosisDto)).rejects.toThrow(BadRequestException);
+      await expect(service.updateDiagnosisById(999, {} as PatchDiagnosisDto)).rejects.toThrow(NotFoundException);
     });
   });
 
   describe("getAllDiagnosis", () => {
-    it("should return all diagnosis", async () => {
+    it("should return paginated diagnosis", async () => {
+      const paginationDto: PaginationDto = { page: 1, limit: 10 } as any;
       const mockDiagnosis = [{ id: 1, description: "test" }];
 
-      mockPrismaClient.diagnosis.findMany.mockResolvedValue(mockDiagnosis);
+      mockPrismaService.diagnosis.count.mockResolvedValue(1);
+      mockPrismaService.diagnosis.findMany.mockResolvedValue(mockDiagnosis);
 
-      const result = await service.getAllDiagnosis();
+      const result = await service.getAllDiagnosis(paginationDto);
 
-      expect(service.diagnosis.findMany).toHaveBeenCalled();
-      expect(result).toEqual(mockDiagnosis);
+      expect(mockPrismaService.diagnosis.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 10 }),
+      );
+      expect(result).toEqual({
+        totalPage: 1,
+        page: 1,
+        total: 1,
+        data: mockDiagnosis,
+      });
     });
   });
 
@@ -241,16 +257,16 @@ describe("IntermentService", () => {
     it("should return diagnosis if found", async () => {
       const mockDiagnosis = { id: 1, description: "test" };
 
-      mockPrismaClient.diagnosis.findUnique.mockResolvedValue(mockDiagnosis);
+      mockPrismaService.diagnosis.findUnique.mockResolvedValue(mockDiagnosis);
 
       const result = await service.getDiagnosisById(1);
 
-      expect(service.diagnosis.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockPrismaService.diagnosis.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual(mockDiagnosis);
     });
 
     it("should throw NotFoundException if diagnosis not found", async () => {
-      mockPrismaClient.diagnosis.findUnique.mockResolvedValue(null);
+      mockPrismaService.diagnosis.findUnique.mockResolvedValue(null);
 
       await expect(service.getDiagnosisById(999)).rejects.toThrow(NotFoundException);
       await expect(service.getDiagnosisById(999)).rejects.toThrow("Diagnosis #999 not found");
@@ -259,17 +275,14 @@ describe("IntermentService", () => {
 
   describe("addDiagnosisInInterment", () => {
     it("should add diagnosis to interment", async () => {
-      jest.spyOn(service, "findOne").mockResolvedValue({ id: 1 } as any);
-
       const dto: CreateDiagnosisDto = { description: "new diagnosis" } as any;
       const mockCreated = { id: 1, Diagnosis: [dto] };
 
-      mockPrismaClient.interment.update.mockResolvedValue(mockCreated);
+      mockPrismaService.interment.update.mockResolvedValue(mockCreated);
 
       const result = await service.addDiagnosisInInterment(1, dto);
 
-      expect(service.findOne).toHaveBeenCalledWith(1);
-      expect(service.interment.update).toHaveBeenCalledWith(
+      expect(mockPrismaService.interment.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 1 },
           data: { Diagnosis: { create: dto } },
@@ -282,25 +295,37 @@ describe("IntermentService", () => {
       });
     });
 
-    it("should throw BadRequestException on error", async () => {
-      jest.spyOn(service, "findOne").mockResolvedValue({ id: 1 } as any);
-      mockPrismaClient.interment.update.mockRejectedValue(new Error("DB error"));
+    it("should throw NotFoundException when interment does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.interment.update.mockRejectedValue(prismaError);
 
-      await expect(service.addDiagnosisInInterment(1, {} as CreateDiagnosisDto)).rejects.toThrow(BadRequestException);
+      await expect(service.addDiagnosisInInterment(999, {} as CreateDiagnosisDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe("remove", () => {
     it("should remove interment", async () => {
-      jest.spyOn(service, "findOne").mockResolvedValue({ id: 1 } as any);
-
-      mockPrismaClient.interment.delete.mockResolvedValue(undefined);
+      mockPrismaService.interment.delete.mockResolvedValue(undefined);
 
       const result = await service.remove(1);
 
-      expect(service.findOne).toHaveBeenCalledWith(1);
-      expect(service.interment.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockPrismaService.interment.delete).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual("Interment #1 deleted successfully");
+    });
+
+    it("should throw NotFoundException when interment does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.interment.delete.mockRejectedValue(prismaError);
+
+      await expect(service.remove(999)).rejects.toThrow(NotFoundException);
     });
   });
 });

@@ -78,15 +78,16 @@ describe("IntermentController", () => {
   });
 
   describe("getAllDiagnosis", () => {
-    it("should call service.getAllDiagnosis", async () => {
+    it("should call service.getAllDiagnosis with pagination DTO", async () => {
       const mockUser = "user-id";
-      const expectedResult = [{ id: 1, diagnosis: "Test" }];
+      const paginationDto: PaginationDto = { limit: 10, page: 1 } as any;
+      const expectedResult = { data: [{ id: 1, diagnosis: "Test" }], totalPage: 1 };
 
       mockIntermentService.getAllDiagnosis.mockResolvedValue(expectedResult);
 
-      const result = await controller.getAllDiagnosis(mockUser);
+      const result = await controller.getAllDiagnosis(mockUser, paginationDto);
 
-      expect(service.getAllDiagnosis).toHaveBeenCalled();
+      expect(service.getAllDiagnosis).toHaveBeenCalledWith(paginationDto);
       expect(result).toEqual(expectedResult);
     });
   });

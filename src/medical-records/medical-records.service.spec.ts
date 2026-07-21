@@ -3,14 +3,15 @@ import { MedicalRecordsService } from "./medical-records.service";
 import { DoctorsService } from "../doctors/doctors.service";
 import { PatientsService } from "../patients/patients.service";
 import { AuthService } from "../auth/auth.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { CreateMedicalRecordDto } from "./dto/create-medical-record.dto";
 import { UpdateMedicalRecordDto } from "./dto/update-medical-record.dto";
 import { PaginationDto } from "../common/dto/pagination.dto";
 import { NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 
 describe("MedicalRecordsService", () => {
   let service: MedicalRecordsService;
-  let doctorsService: DoctorsService;
   let patientsService: PatientsService;
   let authService: AuthService;
 
@@ -26,7 +27,7 @@ describe("MedicalRecordsService", () => {
     findOne: jest.fn(),
   };
 
-  const mockPrismaClient = {
+  const mockPrismaService = {
     medicalRecord: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -35,34 +36,22 @@ describe("MedicalRecordsService", () => {
       delete: jest.fn(),
       count: jest.fn(),
     },
-    $connect: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MedicalRecordsService,
-        {
-          provide: DoctorsService,
-          useValue: mockDoctorsService,
-        },
-        {
-          provide: PatientsService,
-          useValue: mockPatientsService,
-        },
-        {
-          provide: AuthService,
-          useValue: mockAuthService,
-        },
+        { provide: DoctorsService, useValue: mockDoctorsService },
+        { provide: PatientsService, useValue: mockPatientsService },
+        { provide: AuthService, useValue: mockAuthService },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 
     service = module.get<MedicalRecordsService>(MedicalRecordsService);
-    doctorsService = module.get<DoctorsService>(DoctorsService);
     patientsService = module.get<PatientsService>(PatientsService);
     authService = module.get<AuthService>(AuthService);
-
-    Object.assign(service, mockPrismaClient);
   });
 
   afterEach(() => {
@@ -82,13 +71,13 @@ describe("MedicalRecordsService", () => {
 
       mockAuthService.findOne.mockResolvedValue(mockAuth);
       mockPatientsService.findOne.mockResolvedValue(mockPatient);
-      mockPrismaClient.medicalRecord.create.mockResolvedValue(mockCreated);
+      mockPrismaService.medicalRecord.create.mockResolvedValue(mockCreated);
 
       const result = await service.create(dto);
 
       expect(authService.findOne).toHaveBeenCalledWith(dto.doctorId);
       expect(patientsService.findOne).toHaveBeenCalledWith(dto.patientsId);
-      expect(mockPrismaClient.medicalRecord.create).toHaveBeenCalledWith({ data: dto });
+      expect(mockPrismaService.medicalRecord.create).toHaveBeenCalledWith({ data: dto });
       expect(result).toEqual(mockCreated);
     });
 
@@ -114,38 +103,50 @@ describe("MedicalRecordsService", () => {
   });
 
   describe("findAll", () => {
-    it("should return all medical records", async () => {
+    it("should return paginated medical records", async () => {
+      const paginationDto: PaginationDto = { page: 1, limit: 10 } as any;
       const mockRecords = [{ id: 1 }, { id: 2 }];
 
-      mockPrismaClient.medicalRecord.findMany.mockResolvedValue(mockRecords);
+      mockPrismaService.medicalRecord.count.mockResolvedValue(2);
+      mockPrismaService.medicalRecord.findMany.mockResolvedValue(mockRecords);
 
-      const result = await service.findAll();
+      const result = await service.findAll(paginationDto);
 
-      expect(mockPrismaClient.medicalRecord.findMany).toHaveBeenCalled();
-      expect(result).toEqual(mockRecords);
+      expect(mockPrismaService.medicalRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 10 }),
+      );
+      expect(result).toEqual({
+        totalPage: 1,
+        page: 1,
+        total: 2,
+        data: mockRecords,
+      });
     });
   });
 
   describe("findAllWithPatientsAndDoctors", () => {
-    it("should return paginated medical records with relations", async () => {
+    it("should return paginated medical records with relations, counting once", async () => {
       const paginationDto: PaginationDto = { page: 1, limit: 10 } as any;
       const mockRecords = [{ id: 1, Doctor: {}, Patients: {} }];
 
-      mockPrismaClient.medicalRecord.count.mockResolvedValue(25);
-      mockPrismaClient.medicalRecord.findMany.mockResolvedValue(mockRecords);
+      mockPrismaService.medicalRecord.count.mockResolvedValue(25);
+      mockPrismaService.medicalRecord.findMany.mockResolvedValue(mockRecords);
 
       const result = await service.findAllWithPatientsAndDoctors(paginationDto);
 
-      expect(mockPrismaClient.medicalRecord.count).toHaveBeenCalled();
-      expect(mockPrismaClient.medicalRecord.findMany).toHaveBeenCalledWith({
-        skip: 0,
-        take: 10,
-        include: {
-          Doctor: { include: { auth: true } },
-          Patients: true,
-        },
-        orderBy: { createdAt: "desc" },
-      });
+      expect(mockPrismaService.medicalRecord.count).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.medicalRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 0,
+          take: 10,
+          orderBy: { createdAt: "desc" },
+        }),
+      );
+
+      const callArgs = mockPrismaService.medicalRecord.findMany.mock.calls[0][0];
+      expect(callArgs.select.Doctor.select.auth.select.email).toBeDefined();
+      expect(callArgs.select.Doctor.select.auth.select).not.toHaveProperty("password");
+
       expect(result).toEqual({
         totalPage: 3,
         page: 1,
@@ -163,12 +164,12 @@ describe("MedicalRecordsService", () => {
       const mockRecords = [{ id: 1, patientsId: 5 }];
 
       mockPatientsService.findOne.mockResolvedValue(mockPatient);
-      mockPrismaClient.medicalRecord.findMany.mockResolvedValue(mockRecords);
+      mockPrismaService.medicalRecord.findMany.mockResolvedValue(mockRecords);
 
       const result = await service.findMedicalRecordsByPatientId(patientId, paginationDto);
 
       expect(patientsService.findOne).toHaveBeenCalledWith(patientId);
-      expect(mockPrismaClient.medicalRecord.findMany).toHaveBeenCalledWith(
+      expect(mockPrismaService.medicalRecord.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { patientsId: patientId },
           orderBy: { createdAt: "asc" },
@@ -183,9 +184,11 @@ describe("MedicalRecordsService", () => {
       const mockPatient = { id: 5 };
 
       mockPatientsService.findOne.mockResolvedValue(mockPatient);
-      mockPrismaClient.medicalRecord.findMany.mockRejectedValue(new Error("DB error"));
+      mockPrismaService.medicalRecord.findMany.mockRejectedValue(new Error("DB error"));
 
-      await expect(service.findMedicalRecordsByPatientId(patientId, paginationDto)).rejects.toThrow(NotFoundException);
+      await expect(service.findMedicalRecordsByPatientId(patientId, paginationDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -197,12 +200,12 @@ describe("MedicalRecordsService", () => {
       const mockRecords = [{ id: 1, doctorId: 3 }];
 
       mockAuthService.findOne.mockResolvedValue(mockAuth);
-      mockPrismaClient.medicalRecord.findMany.mockResolvedValue(mockRecords);
+      mockPrismaService.medicalRecord.findMany.mockResolvedValue(mockRecords);
 
       const result = await service.findMedicalRecordsByDoctorId(doctorId, paginationDto);
 
       expect(authService.findOne).toHaveBeenCalledWith(doctorId);
-      expect(mockPrismaClient.medicalRecord.findMany).toHaveBeenCalledWith(
+      expect(mockPrismaService.medicalRecord.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { Doctor: { auth: { id: doctorId } } },
           orderBy: { createdAt: "desc" },
@@ -217,7 +220,7 @@ describe("MedicalRecordsService", () => {
       const mockAuth = { id: 3 };
 
       mockAuthService.findOne.mockResolvedValue(mockAuth);
-      mockPrismaClient.medicalRecord.findMany.mockRejectedValue(new Error("DB error"));
+      mockPrismaService.medicalRecord.findMany.mockRejectedValue(new Error("DB error"));
 
       await expect(service.findMedicalRecordsByDoctorId(doctorId, paginationDto)).rejects.toThrow(NotFoundException);
     });
@@ -227,16 +230,16 @@ describe("MedicalRecordsService", () => {
     it("should return a medical record by id", async () => {
       const mockRecord = { id: 1, diagnosis: "Flu" };
 
-      mockPrismaClient.medicalRecord.findUnique.mockResolvedValue(mockRecord);
+      mockPrismaService.medicalRecord.findUnique.mockResolvedValue(mockRecord);
 
       const result = await service.findOne(1);
 
-      expect(mockPrismaClient.medicalRecord.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockPrismaService.medicalRecord.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual(mockRecord);
     });
 
     it("should throw NotFoundException when record not found", async () => {
-      mockPrismaClient.medicalRecord.findUnique.mockResolvedValue(null);
+      mockPrismaService.medicalRecord.findUnique.mockResolvedValue(null);
 
       await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
       await expect(service.findOne(999)).rejects.toThrow("MedicalRecord #999 not found");
@@ -246,23 +249,25 @@ describe("MedicalRecordsService", () => {
   describe("update", () => {
     it("should update a medical record", async () => {
       const dto: UpdateMedicalRecordDto = { diagnosis: "Updated" } as any;
-      const mockExisting = { id: 1, diagnosis: "Flu" };
       const mockUpdated = { id: 1, diagnosis: "Updated" };
 
-      mockPrismaClient.medicalRecord.findUnique.mockResolvedValue(mockExisting);
-      mockPrismaClient.medicalRecord.update.mockResolvedValue(mockUpdated);
+      mockPrismaService.medicalRecord.update.mockResolvedValue(mockUpdated);
 
       const result = await service.update(1, dto);
 
-      expect(mockPrismaClient.medicalRecord.update).toHaveBeenCalledWith({
+      expect(mockPrismaService.medicalRecord.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: dto,
       });
       expect(result).toEqual(mockUpdated);
     });
 
-    it("should throw NotFoundException if record does not exist", async () => {
-      mockPrismaClient.medicalRecord.findUnique.mockResolvedValue(null);
+    it("should throw NotFoundException if record does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.medicalRecord.update.mockRejectedValue(prismaError);
 
       await expect(service.update(999, {} as any)).rejects.toThrow(NotFoundException);
     });
@@ -272,17 +277,20 @@ describe("MedicalRecordsService", () => {
     it("should delete a medical record", async () => {
       const mockRecord = { id: 1, diagnosis: "Flu" };
 
-      mockPrismaClient.medicalRecord.findUnique.mockResolvedValue(mockRecord);
-      mockPrismaClient.medicalRecord.delete.mockResolvedValue(mockRecord);
+      mockPrismaService.medicalRecord.delete.mockResolvedValue(mockRecord);
 
       const result = await service.remove(1);
 
-      expect(mockPrismaClient.medicalRecord.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockPrismaService.medicalRecord.delete).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual(mockRecord);
     });
 
-    it("should throw NotFoundException if record does not exist", async () => {
-      mockPrismaClient.medicalRecord.findUnique.mockResolvedValue(null);
+    it("should throw NotFoundException if record does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.medicalRecord.delete.mockRejectedValue(prismaError);
 
       await expect(service.remove(999)).rejects.toThrow(NotFoundException);
     });

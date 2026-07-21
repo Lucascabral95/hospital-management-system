@@ -1,19 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { PrismaClient, Status } from "@prisma/client";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma, Status } from "@prisma/client";
 import { CreateDiagnosisDto, CreateIntermentDto, PatchDiagnosisDto, UpdateIntermentDto } from "./dto";
 import { PaginationDto } from "src/common/dto/pagination.dto";
+import { PrismaService } from "src/prisma/prisma.service";
 
 @Injectable()
-export class IntermentService extends PrismaClient implements OnModuleInit {
-  async onModuleInit() {
-    await this.$connect();
-  }
+export class IntermentService {
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createIntermentDto: CreateIntermentDto) {
     try {
       const { diagnosis, ...intermentData } = createIntermentDto;
 
-      const interment = await this.interment.create({
+      const interment = await this.prisma.interment.create({
         data: {
           ...intermentData,
           ...(diagnosis && diagnosis.length > 0
@@ -46,50 +45,50 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
     const sortedByFinal = searchSort.includes(sortedBy) ? sortedBy : "createdAt";
     const orderFinal = ["asc", "desc"].includes(order) ? order : "desc";
 
-    const data = await this.interment.findMany({
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        Diagnosis: true,
-        doctor: {
-          select: {
-            specialty: true,
-            licenceNumber: true,
-            id: true,
-            auth: {
-              select: {
-                id: true,
-                full_name: true,
-                email: true,
+    const [totalInterments, data] = await Promise.all([
+      this.prisma.interment.count(),
+      this.prisma.interment.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          Diagnosis: true,
+          doctor: {
+            select: {
+              specialty: true,
+              licenceNumber: true,
+              id: true,
+              auth: {
+                select: {
+                  id: true,
+                  full_name: true,
+                  email: true,
+                },
               },
             },
           },
-        },
-        patient: {
-          select: {
-            name: true,
-            last_name: true,
-            dni: true,
-            date_born: true,
-            gender: true,
-            phone: true,
-            street: true,
-            city: true,
-            state: true,
-            zip_code: true,
+          patient: {
+            select: {
+              name: true,
+              last_name: true,
+              dni: true,
+              date_born: true,
+              gender: true,
+              phone: true,
+              street: true,
+              city: true,
+              state: true,
+              zip_code: true,
+            },
           },
         },
-      },
-      orderBy: {
-        [sortedByFinal]: orderFinal,
-      },
-    });
-
-    const totalInterments = await this.interment.count();
-    const totalPages = Math.ceil(totalInterments / limit);
+        orderBy: {
+          [sortedByFinal]: orderFinal,
+        },
+      }),
+    ]);
 
     return {
-      totalPages,
+      totalPages: Math.ceil(totalInterments / limit),
       page,
       total: totalInterments,
       data,
@@ -98,7 +97,7 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
 
   async findOne(id: number) {
     try {
-      const interment = await this.interment.findUnique({
+      const interment = await this.prisma.interment.findUnique({
         where: { id },
         include: {
           Diagnosis: true,
@@ -138,6 +137,7 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
 
       return interment;
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new BadRequestException(error.message);
     }
   }
@@ -156,23 +156,14 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
   }
 
   async updateStatus(id: number, status: Status) {
-    await this.findOne(id);
-
     try {
-      const updatedStatusOfInterment = await this.interment.update({
+      const updatedStatusOfInterment = await this.prisma.interment.update({
         where: {
           id: id,
         },
         data: {
           status: status,
-          dischargeDate:
-            status === Status.COMPLETED
-              ? new Date()
-              : status === Status.PENDING
-                ? null
-                : status === Status.IN_PROGRESS
-                  ? null
-                  : null,
+          dischargeDate: status === Status.COMPLETED ? new Date() : null,
         },
         include: {
           Diagnosis: true,
@@ -184,15 +175,16 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
         updatedStatusOfInterment,
       };
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException(`Interment #${id} not found`);
+      }
       throw new BadRequestException(error.message);
     }
   }
 
   async updateDiagnosisById(intermentId: number, updateDiagnosisDto: PatchDiagnosisDto) {
-    await this.getDiagnosisById(intermentId);
-
     try {
-      const updatedDiagnosis = await this.diagnosis.update({
+      const updatedDiagnosis = await this.prisma.diagnosis.update({
         where: {
           id: intermentId,
         },
@@ -204,16 +196,35 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
         updatedDiagnosis,
       };
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException(`Diagnosis #${intermentId} not found`);
+      }
       throw new BadRequestException(error.message);
     }
   }
 
-  async getAllDiagnosis() {
-    return await this.diagnosis.findMany();
+  async getAllDiagnosis(paginationDto: PaginationDto) {
+    const { page, limit } = paginationDto;
+
+    const [total, data] = await Promise.all([
+      this.prisma.diagnosis.count(),
+      this.prisma.diagnosis.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { date: "desc" },
+      }),
+    ]);
+
+    return {
+      totalPage: Math.ceil(total / limit),
+      page,
+      total,
+      data,
+    };
   }
 
   async getDiagnosisById(id: number) {
-    const findDiagnosisById = await this.diagnosis.findUnique({
+    const findDiagnosisById = await this.prisma.diagnosis.findUnique({
       where: {
         id,
       },
@@ -227,10 +238,8 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
   }
 
   async addDiagnosisInInterment(intermentId: number, createDiagnosisDto: CreateDiagnosisDto) {
-    await this.findOne(intermentId);
-
     try {
-      const createdDiagnosis = await this.interment.update({
+      const createdDiagnosis = await this.prisma.interment.update({
         where: {
           id: intermentId,
         },
@@ -246,17 +255,23 @@ export class IntermentService extends PrismaClient implements OnModuleInit {
         createdDiagnosis,
       };
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException(`Interment #${intermentId} not found`);
+      }
       throw new BadRequestException(error.message);
     }
   }
 
   async remove(id: number) {
-    await this.findOne(id);
-
-    await this.interment.delete({ where: { id } });
+    try {
+      await this.prisma.interment.delete({ where: { id } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException(`Interment #${id} not found`);
+      }
+      throw error;
+    }
 
     return `Interment #${id} deleted successfully`;
   }
-
-  async;
 }

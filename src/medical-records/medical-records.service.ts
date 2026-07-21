@@ -1,29 +1,45 @@
-import { Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { CreateMedicalRecordDto, UpdateMedicalRecordDto } from "./dto";
-import { PrismaClient } from "@prisma/client";
-import { DoctorsService } from "src/doctors/doctors.service";
+import { Prisma } from "@prisma/client";
 import { PatientsService } from "src/patients/patients.service";
 import { PaginationDto } from "src/common/dto/pagination.dto";
 import { AuthService } from "src/auth/auth.service";
+import { PrismaService } from "src/prisma/prisma.service";
+
+const DOCTOR_WITH_AUTH_SELECT = {
+  id: true,
+  specialty: true,
+  licenceNumber: true,
+  auth: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      role: true,
+      is_active: true,
+    },
+  },
+} satisfies Prisma.DoctorSelect;
+
+const PATIENT_SUMMARY_SELECT = {
+  id: true,
+  dni: true,
+  name: true,
+  last_name: true,
+  date_born: true,
+  gender: true,
+  country: true,
+} satisfies Prisma.PatientsSelect;
 
 @Injectable()
-export class MedicalRecordsService extends PrismaClient implements OnModuleInit {
+export class MedicalRecordsService {
   constructor(
-    private readonly doctorService: DoctorsService,
+    private readonly prisma: PrismaService,
     private readonly patientService: PatientsService,
     private readonly authService: AuthService,
-  ) {
-    super();
-  }
-  onModuleInit() {
-    this.$connect();
-  }
+  ) {}
 
   async create(createMedicalRecordDto: CreateMedicalRecordDto) {
-    // const findDoctor = await this.doctorService.findOne(createMedicalRecordDto.doctorId);
-    // if (!findDoctor) {
-    //   throw new NotFoundException(`Doctor #${createMedicalRecordDto.doctorId} not found`);
-    // }
     const findAuth = await this.authService.findOne(createMedicalRecordDto.doctorId);
     if (!findAuth) {
       throw new NotFoundException(`Auth #${createMedicalRecordDto.doctorId} not found`);
@@ -34,40 +50,60 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
       throw new NotFoundException(`Patient #${createMedicalRecordDto.patientsId} not found`);
     }
 
-    return await this.medicalRecord.create({
+    return await this.prisma.medicalRecord.create({
       data: {
         ...createMedicalRecordDto,
       },
     });
   }
 
-  async findAll() {
-    return await this.medicalRecord.findMany();
+  async findAll(paginationDto: PaginationDto) {
+    const { page, limit } = paginationDto;
+
+    const [total, medicalRecords] = await Promise.all([
+      this.prisma.medicalRecord.count(),
+      this.prisma.medicalRecord.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    return {
+      totalPage: Math.ceil(total / limit),
+      page,
+      total,
+      data: medicalRecords,
+    };
   }
 
   async findAllWithPatientsAndDoctors(paginationDto: PaginationDto) {
     const { limit, page } = paginationDto;
-    const totalPages = Math.ceil((await this.medicalRecord.count()) / limit);
-    const totalRecords = await this.medicalRecord.count();
 
-    const medicalRecords = await this.medicalRecord.findMany({
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        Doctor: {
-          include: {
-            auth: true,
-          },
+    const [totalRecords, medicalRecords] = await Promise.all([
+      this.prisma.medicalRecord.count(),
+      this.prisma.medicalRecord.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          date: true,
+          reasonForVisit: true,
+          diagnosis: true,
+          treatment: true,
+          createdAt: true,
+          updatedAt: true,
+          Doctor: { select: DOCTOR_WITH_AUTH_SELECT },
+          Patients: { select: PATIENT_SUMMARY_SELECT },
         },
-        Patients: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+    ]);
 
     return {
-      totalPage: totalPages,
+      totalPage: Math.ceil(totalRecords / limit),
       page: page,
       total: totalRecords,
       data: medicalRecords,
@@ -81,7 +117,7 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
     const { order, sortedBy = "createdAt" } = paginationDto;
 
     try {
-      const findMedicalRecordsByPatientId = await this.medicalRecord.findMany({
+      const findMedicalRecordsByPatientId = await this.prisma.medicalRecord.findMany({
         where: {
           patientsId: id,
         },
@@ -90,31 +126,10 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
         },
         include: {
           Doctor: {
-            select: {
-              id: true,
-              specialty: true,
-              licenceNumber: true,
-              auth: {
-                select: {
-                  id: true,
-                  full_name: true,
-                  email: true,
-                  role: true,
-                  is_active: true,
-                },
-              },
-            },
+            select: DOCTOR_WITH_AUTH_SELECT,
           },
           Patients: {
-            select: {
-              id: true,
-              dni: true,
-              name: true,
-              last_name: true,
-              date_born: true,
-              gender: true,
-              country: true,
-            },
+            select: PATIENT_SUMMARY_SELECT,
           },
         },
       });
@@ -131,7 +146,7 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
     const { order, sortedBy = "createdAt" } = paginationDto;
 
     try {
-      const findMedicalRecordsByDoctorId = await this.medicalRecord.findMany({
+      const findMedicalRecordsByDoctorId = await this.prisma.medicalRecord.findMany({
         where: {
           Doctor: {
             auth: {
@@ -144,31 +159,10 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
         },
         include: {
           Doctor: {
-            select: {
-              id: true,
-              specialty: true,
-              licenceNumber: true,
-              auth: {
-                select: {
-                  id: true,
-                  full_name: true,
-                  email: true,
-                  role: true,
-                  is_active: true,
-                },
-              },
-            },
+            select: DOCTOR_WITH_AUTH_SELECT,
           },
           Patients: {
-            select: {
-              id: true,
-              dni: true,
-              name: true,
-              last_name: true,
-              date_born: true,
-              gender: true,
-              country: true,
-            },
+            select: PATIENT_SUMMARY_SELECT,
           },
         },
       });
@@ -182,7 +176,7 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
   // -----------------------
 
   async findOne(id: number) {
-    const findOneMedicalRecord = await this.medicalRecord.findUnique({
+    const findOneMedicalRecord = await this.prisma.medicalRecord.findUnique({
       where: {
         id,
       },
@@ -196,25 +190,35 @@ export class MedicalRecordsService extends PrismaClient implements OnModuleInit 
   }
 
   async update(id: number, updateMedicalRecordDto: UpdateMedicalRecordDto) {
-    await this.findOne(id);
-
-    return await this.medicalRecord.update({
-      where: {
-        id,
-      },
-      data: {
-        ...updateMedicalRecordDto,
-      },
-    });
+    try {
+      return await this.prisma.medicalRecord.update({
+        where: {
+          id,
+        },
+        data: {
+          ...updateMedicalRecordDto,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException(`MedicalRecord #${id} not found`);
+      }
+      throw error;
+    }
   }
 
   async remove(id: number) {
-    await this.findOne(id);
-
-    return await this.medicalRecord.delete({
-      where: {
-        id,
-      },
-    });
+    try {
+      return await this.prisma.medicalRecord.delete({
+        where: {
+          id,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException(`MedicalRecord #${id} not found`);
+      }
+      throw error;
+    }
   }
 }

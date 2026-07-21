@@ -19,31 +19,33 @@ jest.mock("bcrypt", () => ({
 
 import { Test, TestingModule } from "@nestjs/testing";
 import { AppService } from "./app.service";
+import { PrismaService } from "./prisma/prisma.service";
 
 describe("AppService", () => {
   let service: AppService;
 
+  const mockPrismaService = {
+    $executeRaw: jest.fn().mockResolvedValue(undefined),
+    auth: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    doctor: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    patients: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    medicalRecord: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    prescriptions: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    interment: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    diagnosis: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    appointment: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AppService],
+      providers: [AppService, { provide: PrismaService, useValue: mockPrismaService }],
     }).compile();
 
     service = module.get<AppService>(AppService);
+  });
 
-    jest.spyOn(service, "$connect").mockImplementation(async () => {});
-
-    jest.spyOn(service, "$executeRaw").mockResolvedValue(undefined as any);
-
-    Object.assign(service, {
-      auth: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      doctor: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      patients: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      medicalRecord: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      prescriptions: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      interment: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      diagnosis: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      appointment: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-    });
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it("should be defined", () => {
@@ -60,9 +62,9 @@ describe("AppService", () => {
     it("should execute truncates and seed data successfully", async () => {
       const result = await service.createSeed();
 
-      expect(service.$executeRaw).toHaveBeenCalledTimes(8);
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(8);
 
-      expect(service.auth.createMany).toHaveBeenCalled();
+      expect(mockPrismaService.auth.createMany).toHaveBeenCalled();
 
       expect(result).toBe("Seeded successfully");
     });

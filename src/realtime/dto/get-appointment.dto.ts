@@ -1,5 +1,5 @@
-import { Specialty, Status } from "@prisma/client";
-import { IsDate, IsEnum, IsNumber, IsPositive } from "class-validator";
+import { AppointmentStatus, Specialty } from "@prisma/client";
+import { IsDate, IsEnum, IsNumber, IsOptional, IsPositive } from "class-validator";
 
 export class GetAppointmentsDto {
   @IsNumber()
@@ -10,11 +10,16 @@ export class GetAppointmentsDto {
   @IsPositive()
   patientsId: number;
 
+  @IsNumber()
+  @IsPositive()
+  @IsOptional()
+  doctorId?: number | null;
+
   @IsEnum(Specialty)
   specialty: Specialty;
 
-  @IsEnum(Status)
-  status: Status;
+  @IsEnum(AppointmentStatus)
+  status: AppointmentStatus;
 
   @IsDate()
   scheduledAt: Date;

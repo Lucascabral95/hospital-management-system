@@ -1,7 +1,9 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { PrescriptionsService } from "./prescriptions.service";
 import { MedicalRecordsService } from "../medical-records/medical-records.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { CreatePrescriptionDto } from "./dto/create-prescription.dto";
 import { UpdatePrescriptionDto } from "./dto/update-prescription.dto";
 
@@ -13,32 +15,28 @@ describe("PrescriptionsService", () => {
     findOne: jest.fn(),
   };
 
-  const mockPrismaClient = {
+  const mockPrismaService = {
     prescriptions: {
       create: jest.fn(),
+      count: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
     },
-    $connect: jest.fn(),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PrescriptionsService,
-        {
-          provide: MedicalRecordsService,
-          useValue: mockMedicalRecordsService,
-        },
+        { provide: MedicalRecordsService, useValue: mockMedicalRecordsService },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 
     service = module.get<PrescriptionsService>(PrescriptionsService);
     medicalRecordsService = module.get<MedicalRecordsService>(MedicalRecordsService);
-
-    Object.assign(service, mockPrismaClient);
   });
 
   afterEach(() => {
@@ -56,12 +54,12 @@ describe("PrescriptionsService", () => {
       const mockCreatedPrescription = { id: 1, ...dto };
 
       mockMedicalRecordsService.findOne.mockResolvedValue(mockMedicalRecord);
-      mockPrismaClient.prescriptions.create.mockResolvedValue(mockCreatedPrescription);
+      mockPrismaService.prescriptions.create.mockResolvedValue(mockCreatedPrescription);
 
       const result = await service.create(dto);
 
       expect(medicalRecordsService.findOne).toHaveBeenCalledWith(dto.medicalRecordId);
-      expect(mockPrismaClient.prescriptions.create).toHaveBeenCalledWith({ data: dto });
+      expect(mockPrismaService.prescriptions.create).toHaveBeenCalledWith({ data: dto });
       expect(result).toEqual(mockCreatedPrescription);
     });
 
@@ -76,20 +74,31 @@ describe("PrescriptionsService", () => {
   });
 
   describe("findAll", () => {
-    it("should return all prescriptions with medical records", async () => {
+    it("should return paginated prescriptions with medical records", async () => {
+      const paginationDto = { page: 1, limit: 10 } as any;
       const mockPrescriptions = [
         { id: 1, MedicalRecord: { id: 1 } },
         { id: 2, MedicalRecord: { id: 2 } },
       ];
 
-      mockPrismaClient.prescriptions.findMany.mockResolvedValue(mockPrescriptions);
+      mockPrismaService.prescriptions.count.mockResolvedValue(2);
+      mockPrismaService.prescriptions.findMany.mockResolvedValue(mockPrescriptions);
 
-      const result = await service.findAll();
+      const result = await service.findAll(paginationDto);
 
-      expect(mockPrismaClient.prescriptions.findMany).toHaveBeenCalledWith({
-        include: { MedicalRecord: true },
+      expect(mockPrismaService.prescriptions.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 0,
+          take: 10,
+          include: { MedicalRecord: true },
+        }),
+      );
+      expect(result).toEqual({
+        totalPage: 1,
+        page: 1,
+        total: 2,
+        data: mockPrescriptions,
       });
-      expect(result).toEqual(mockPrescriptions);
     });
   });
 
@@ -97,16 +106,16 @@ describe("PrescriptionsService", () => {
     it("should return a prescription when found", async () => {
       const mockPrescription = { id: 1, note: "Test" };
 
-      mockPrismaClient.prescriptions.findUnique.mockResolvedValue(mockPrescription);
+      mockPrismaService.prescriptions.findUnique.mockResolvedValue(mockPrescription);
 
       const result = await service.findOne(1);
 
-      expect(mockPrismaClient.prescriptions.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockPrismaService.prescriptions.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual(mockPrescription);
     });
 
     it("should throw NotFoundException when prescription not found", async () => {
-      mockPrismaClient.prescriptions.findUnique.mockResolvedValue(null);
+      mockPrismaService.prescriptions.findUnique.mockResolvedValue(null);
 
       await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
       await expect(service.findOne(999)).rejects.toThrow("Prescription not found");
@@ -116,15 +125,13 @@ describe("PrescriptionsService", () => {
   describe("update", () => {
     it("should update a prescription when found", async () => {
       const dto: UpdatePrescriptionDto = { note: "Updated" } as any;
-      const mockExisting = { id: 1, note: "Old" };
       const mockUpdated = { id: 1, note: "Updated" };
 
-      mockPrismaClient.prescriptions.findUnique.mockResolvedValue(mockExisting);
-      mockPrismaClient.prescriptions.update.mockResolvedValue(mockUpdated);
+      mockPrismaService.prescriptions.update.mockResolvedValue(mockUpdated);
 
       const result = await service.update(1, dto);
 
-      expect(mockPrismaClient.prescriptions.update).toHaveBeenCalledWith({
+      expect(mockPrismaService.prescriptions.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: dto,
       });
@@ -134,8 +141,12 @@ describe("PrescriptionsService", () => {
       });
     });
 
-    it("should throw NotFoundException if prescription does not exist", async () => {
-      mockPrismaClient.prescriptions.findUnique.mockResolvedValue(null);
+    it("should throw NotFoundException if prescription does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.prescriptions.update.mockRejectedValue(prismaError);
 
       await expect(service.update(999, {} as any)).rejects.toThrow(NotFoundException);
     });
@@ -145,20 +156,23 @@ describe("PrescriptionsService", () => {
     it("should delete a prescription when found", async () => {
       const mockPrescription = { id: 1, note: "Test" };
 
-      mockPrismaClient.prescriptions.findUnique.mockResolvedValue(mockPrescription);
-      mockPrismaClient.prescriptions.delete.mockResolvedValue(mockPrescription);
+      mockPrismaService.prescriptions.delete.mockResolvedValue(mockPrescription);
 
       const result = await service.remove(1);
 
-      expect(mockPrismaClient.prescriptions.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mockPrismaService.prescriptions.delete).toHaveBeenCalledWith({ where: { id: 1 } });
       expect(result).toEqual({
         message: "Prescription deleted successfully",
         deletedPrescription: mockPrescription,
       });
     });
 
-    it("should throw NotFoundException if prescription does not exist", async () => {
-      mockPrismaClient.prescriptions.findUnique.mockResolvedValue(null);
+    it("should throw NotFoundException if prescription does not exist (P2025)", async () => {
+      const prismaError = new Prisma.PrismaClientKnownRequestError("Not found", {
+        code: "P2025",
+        clientVersion: "5.0.0",
+      });
+      mockPrismaService.prescriptions.delete.mockRejectedValue(prismaError);
 
       await expect(service.remove(999)).rejects.toThrow(NotFoundException);
     });

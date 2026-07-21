@@ -1,22 +1,30 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import type { Cache } from "cache-manager";
 import { CreatePatientDto, UpdatePatientDto } from "./dto";
 import { Prisma } from "@prisma/client";
 import { PaginationDto } from "src/common/dto/pagination.dto";
 import { patients } from "mock";
 import { PrismaService } from "../prisma/prisma.service";
 
+const PATIENTS_SELECT_CACHE_KEY = "patients:select";
+
 @Injectable()
 export class PatientsService {
   private readonly logger = new Logger("PatientsService");
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {
     this.logger.log(`Connected to database`);
   }
 
@@ -25,6 +33,8 @@ export class PatientsService {
       const creationPatient = await this.prisma.patients.create({
         data: createPatientDto,
       });
+
+      await this.cacheManager.del(PATIENTS_SELECT_CACHE_KEY);
 
       return creationPatient;
     } catch (error) {
@@ -103,6 +113,9 @@ export class PatientsService {
   }
 
   async findAllSelect() {
+    const cached = await this.cacheManager.get(PATIENTS_SELECT_CACHE_KEY);
+    if (cached) return cached;
+
     try {
       const allPatients = await this.prisma.patients.findMany({
         select: {
@@ -112,6 +125,8 @@ export class PatientsService {
           dni: true,
         },
       });
+
+      await this.cacheManager.set(PATIENTS_SELECT_CACHE_KEY, allPatients);
 
       return allPatients;
     } catch (error) {
@@ -205,6 +220,8 @@ export class PatientsService {
         data: updatePatientDto,
       });
 
+      await this.cacheManager.del(PATIENTS_SELECT_CACHE_KEY);
+
       return {
         message: "Patient updated successfully",
         updatedPatient,
@@ -221,6 +238,8 @@ export class PatientsService {
       const deletedPatient = await this.prisma.patients.delete({
         where: { id },
       });
+
+      await this.cacheManager.del(PATIENTS_SELECT_CACHE_KEY);
 
       return {
         message: "Patient deleted successfully",

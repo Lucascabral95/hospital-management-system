@@ -1,26 +1,47 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-  OnModuleInit,
-} from "@nestjs/common";
-import { Prisma, PrismaClient } from "@prisma/client";
-import { CreateDoctorDto, UpdateDoctorDto } from "./dto";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import type { Cache } from "cache-manager";
+import { Prisma } from "@prisma/client";
+import { CreateAvailabilityDto, CreateDoctorDto, UpdateDoctorDto } from "./dto";
 import { AuthService } from "src/auth/auth.service";
 import { PaginationDto } from "src/common/dto/pagination.dto";
-import { MedicalRecords } from "../../mock/MedicalRecords";
 import { GetPatientsOfDoctorByIDDto } from "./dto/get-patients-of-doctor-by-id.dto";
+import { PrismaService } from "src/prisma/prisma.service";
+
+const DOCTORS_SELECT_CACHE_KEY = "doctors:select";
+const DOCTORS_DASHBOARD_CACHE_KEY = "doctors:dashboard:resources";
+
+const DOCTOR_SELECT = {
+  id: true,
+  specialty: true,
+  licenceNumber: true,
+  authId: true,
+  createdAt: true,
+  updatedAt: true,
+  auth: {
+    select: {
+      id: true,
+      full_name: true,
+      email: true,
+      role: true,
+      is_active: true,
+    },
+  },
+} satisfies Prisma.DoctorSelect;
 
 @Injectable()
-export class DoctorsService extends PrismaClient implements OnModuleInit {
-  constructor(private readonly authService: AuthService) {
-    super();
-  }
+export class DoctorsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
-  onModuleInit() {
-    this.$connect();
+  private async invalidateHotCaches() {
+    await Promise.all([
+      this.cacheManager.del(DOCTORS_SELECT_CACHE_KEY),
+      this.cacheManager.del(DOCTORS_DASHBOARD_CACHE_KEY),
+    ]);
   }
 
   async create(createDoctorDto: CreateDoctorDto) {
@@ -31,11 +52,13 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
     }
 
     try {
-      const creationDoctor = await this.doctor.create({
+      const creationDoctor = await this.prisma.doctor.create({
         data: {
           ...createDoctorDto,
         },
       });
+
+      await this.invalidateHotCaches();
 
       return creationDoctor;
     } catch (error) {
@@ -43,20 +66,25 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
         if (error.code === "P2002") {
           throw new ConflictException("Licence number already exists");
         }
-      } else {
-        throw new BadRequestException(error.message);
       }
+      throw new BadRequestException(error.message);
     }
   }
 
   async findAll(paginationDto: PaginationDto) {
     const { limit, page } = paginationDto;
-    const totalPages = Math.ceil((await this.doctor.count()) / limit);
-    const total = await this.doctor.count();
 
-    const allDoctors = await this.doctor.findMany();
+    const [total, allDoctors] = await Promise.all([
+      this.prisma.doctor.count(),
+      this.prisma.doctor.findMany({
+        skip: (page - 1) * limit,
+        take: limit,
+        select: DOCTOR_SELECT,
+      }),
+    ]);
+
     return {
-      totalPage: totalPages,
+      totalPage: Math.ceil(total / limit),
       page: page,
       total: total,
       data: allDoctors,
@@ -64,29 +92,26 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
   }
 
   async findOne(id: number) {
-    try {
-      const findDoctorById = await this.doctor.findFirst({
-        where: {
-          id: id,
-        },
-        include: {
-          auth: true,
-        },
-      });
+    const findDoctorById = await this.prisma.doctor.findUnique({
+      where: {
+        id: id,
+      },
+      select: DOCTOR_SELECT,
+    });
 
-      if (!findDoctorById) {
-        throw new NotFoundException("Doctor not found");
-      }
-
-      return findDoctorById;
-    } catch (error) {
-      throw new InternalServerErrorException(error.message);
+    if (!findDoctorById) {
+      throw new NotFoundException("Doctor not found");
     }
+
+    return findDoctorById;
   }
 
   async findAllSelect() {
+    const cached = await this.cacheManager.get(DOCTORS_SELECT_CACHE_KEY);
+    if (cached) return cached;
+
     try {
-      const allDoctors = await this.doctor.findMany({
+      const allDoctors = await this.prisma.doctor.findMany({
         select: {
           id: true,
           specialty: true,
@@ -99,6 +124,8 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
         },
       });
 
+      await this.cacheManager.set(DOCTORS_SELECT_CACHE_KEY, allDoctors);
+
       return allDoctors;
     } catch (error) {
       throw new BadRequestException(error.message);
@@ -108,67 +135,128 @@ export class DoctorsService extends PrismaClient implements OnModuleInit {
   async findPatientsOfDoctorById(doctorId: number) {
     await this.findOne(doctorId);
 
-    try {
-      const findPatientsOfDoctor = await this.doctor.findFirst({
-        where: {
-          id: doctorId,
-        },
-        include: {
-          medicalRecords: {
-            include: {
-              Patients: true,
-            },
+    const findPatientsOfDoctor = await this.prisma.doctor.findFirst({
+      where: {
+        id: doctorId,
+      },
+      include: {
+        medicalRecords: {
+          include: {
+            Patients: true,
           },
         },
-      });
+      },
+    });
 
-      return findPatientsOfDoctor;
-    } catch (error) {
-      throw new InternalServerErrorException(error.message);
-    }
+    return findPatientsOfDoctor;
   }
 
   async update(id: number, updateDoctorDto: UpdateDoctorDto) {
-    await this.findOne(id);
+    try {
+      const updatedDoctor = await this.prisma.doctor.update({
+        where: {
+          id,
+        },
+        data: {
+          ...updateDoctorDto,
+        },
+      });
 
-    const updatedDoctor = await this.doctor.update({
-      where: {
-        id,
-      },
-      data: {
-        ...updateDoctorDto,
-      },
-    });
+      await this.invalidateHotCaches();
 
-    return {
-      message: "Doctor updated successfully",
-      updatedDoctor,
-    };
+      return {
+        message: "Doctor updated successfully",
+        updatedDoctor,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException("Doctor not found");
+      }
+      throw error;
+    }
   }
 
   async remove(id: number) {
-    await this.findOne(id);
+    try {
+      const deletedDoctor = await this.prisma.doctor.delete({
+        where: {
+          id,
+        },
+      });
 
-    const deletedDoctor = await this.doctor.delete({
-      where: {
-        id,
+      await this.invalidateHotCaches();
+
+      return {
+        message: "Doctor deleted successfully",
+        deletedDoctor,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException("Doctor not found");
+      }
+      throw error;
+    }
+  }
+
+  async getAvailability(doctorId: number) {
+    await this.findOne(doctorId);
+
+    return this.prisma.doctorAvailability.findMany({
+      where: { doctorId },
+      orderBy: { dayOfWeek: "asc" },
+    });
+  }
+
+  async addAvailability(doctorId: number, createAvailabilityDto: CreateAvailabilityDto) {
+    await this.findOne(doctorId);
+
+    if (createAvailabilityDto.startTime >= createAvailabilityDto.endTime) {
+      throw new BadRequestException("startTime must be before endTime");
+    }
+
+    return this.prisma.doctorAvailability.create({
+      data: {
+        doctorId,
+        ...createAvailabilityDto,
       },
     });
+  }
 
-    return {
-      message: "Doctor deleted successfully",
-      deletedDoctor,
-    };
+  async removeAvailability(doctorId: number, availabilityId: number) {
+    try {
+      return await this.prisma.doctorAvailability.delete({
+        where: { id: availabilityId, doctorId },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        throw new NotFoundException("Availability slot not found");
+      }
+      throw error;
+    }
   }
 
   async totalResource() {
-    const allResource = {
-      totalDoctors: await this.doctor.count(),
-      totalPatients: await this.patients.count(),
-      totalInterments: await this.interment.count(),
-      totalAppointments: await this.appointment.count(),
+    const cached = await this.cacheManager.get(DOCTORS_DASHBOARD_CACHE_KEY);
+    if (cached) return cached;
+
+    const [totalDoctors, totalPatients, totalInterments, totalAppointments] = await Promise.all([
+      this.prisma.doctor.count(),
+      this.prisma.patients.count(),
+      this.prisma.interment.count(),
+      this.prisma.appointment.count(),
+    ]);
+
+    const result = {
+      totalDoctors,
+      totalPatients,
+      totalInterments,
+      totalAppointments,
     };
 
-    return allResource;
+    // Short TTL: counts span patients/interments/appointments modules too,
+    // so exact cross-module invalidation isn't worth the coupling for a stats dashboard.
+    await this.cacheManager.set(DOCTORS_DASHBOARD_CACHE_KEY, result, 15000);
+
+    return result;
   }
 }

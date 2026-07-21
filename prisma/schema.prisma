@@ -8,15 +8,31 @@ datasource db {
 }
 
 model Auth {
-  id        Int        @id @default(autoincrement())
-  full_name String
-  email     String     @unique
-  password  String
-  role      RoleAccess
-  is_active Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  Doctor    Doctor[]
+  id            Int            @id @default(autoincrement())
+  full_name     String
+  email         String         @unique
+  password      String
+  role          RoleAccess
+  is_active     Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  Doctor        Doctor[]
+  Notifications Notification[]
+}
+
+model Notification {
+  id              Int      @id @default(autoincrement())
+  recipientAuthId Int
+  type            String
+  title           String
+  body            String
+  read            Boolean  @default(false)
+  relatedType     String?
+  relatedId       Int?
+  createdAt       DateTime @default(now())
+  recipient       Auth     @relation(fields: [recipientAuthId], references: [id])
+
+  @@index([recipientAuthId, read])
 }
 
 model Patients {
@@ -42,15 +58,19 @@ model Patients {
 }
 
 model Doctor {
-  id             Int             @id @default(autoincrement())
+  id             Int                  @id @default(autoincrement())
   specialty      String
-  licenceNumber  Int             @unique
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  licenceNumber  Int                  @unique
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   authId         Int
-  auth           Auth            @relation(fields: [authId], references: [id])
+  auth           Auth                 @relation(fields: [authId], references: [id])
   Interment      Interment[]
   medicalRecords MedicalRecord[]
+  Appointment    Appointment[]
+  availability   DoctorAvailability[]
+
+  @@index([authId])
 }
 
 model MedicalRecord {
@@ -66,6 +86,9 @@ model MedicalRecord {
   Doctor         Doctor?        @relation(fields: [doctorId], references: [id])
   Patients       Patients?      @relation(fields: [patientsId], references: [id])
   Prescriptions  Prescriptions?
+
+  @@index([doctorId])
+  @@index([patientsId])
 }
 
 model Prescriptions {
@@ -80,14 +103,35 @@ model Prescriptions {
 }
 
 model Appointment {
-  id          Int       @id @default(autoincrement())
-  patientsId  Int
-  specialty   Specialty @default(Clinician)
-  status      Status    @default(PENDING)
-  scheduledAt DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  patient     Patients  @relation(fields: [patientsId], references: [id])
+  id              Int               @id @default(autoincrement())
+  patientsId      Int
+  doctorId        Int?
+  specialty       Specialty         @default(Clinician)
+  status          AppointmentStatus @default(PENDING)
+  scheduledAt     DateTime          @default(now())
+  durationMinutes Int               @default(30)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  patient         Patients          @relation(fields: [patientsId], references: [id])
+  doctor          Doctor?           @relation(fields: [doctorId], references: [id])
+
+  @@index([patientsId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([doctorId, scheduledAt])
+}
+
+model DoctorAvailability {
+  id        Int      @id @default(autoincrement())
+  doctorId  Int
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  doctor    Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@index([doctorId])
 }
 
 model Interment {
@@ -102,6 +146,10 @@ model Interment {
   Diagnosis     Diagnosis[]
   doctor        Doctor      @relation(fields: [doctorId], references: [id])
   patient       Patients    @relation(fields: [patientId], references: [id])
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([status])
 }
 
 model Diagnosis {
@@ -112,6 +160,8 @@ model Diagnosis {
   date        DateTime          @default(now())
   intermentId Int
   interment   Interment         @relation(fields: [intermentId], references: [id])
+
+  @@index([intermentId])
 }
 
 enum RoleAccess {
@@ -129,6 +179,15 @@ enum Status {
   PENDING
   IN_PROGRESS
   COMPLETED
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }
 
 enum Specialty {

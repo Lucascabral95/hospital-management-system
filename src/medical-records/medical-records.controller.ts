@@ -31,8 +31,8 @@ export class MedicalRecordsController {
   @ApiResponse({ status: 400, description: "Bad request" })
   @ApiResponse({ status: 404, description: "Medical records not found" })
   @ApiResponse({ status: 500, description: "Internal server error" })
-  findAll(@AdminAndDoctors() user: string) {
-    return this.medicalRecordsService.findAll();
+  findAll(@AdminAndDoctors() user: string, @Query() paginationDto: PaginationDto) {
+    return this.medicalRecordsService.findAll(paginationDto);
   }
 
   @Get("patients-doctors")

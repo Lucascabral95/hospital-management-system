@@ -35,8 +35,8 @@ export class IntermentController {
   @ApiResponse({ status: 200, type: [GetDiagnosisDto] })
   @ApiResponse({ status: 400, description: "Bad Request" })
   @ApiResponse({ status: 500, description: "Internal Server Error" })
-  getAllDiagnosis(@AdminAndDoctors() user: string) {
-    return this.intermentService.getAllDiagnosis();
+  getAllDiagnosis(@AdminAndDoctors() user: string, @Query() paginationDto: PaginationDto) {
+    return this.intermentService.getAllDiagnosis(paginationDto);
   }
 
   @Get("diagnosis/:id")

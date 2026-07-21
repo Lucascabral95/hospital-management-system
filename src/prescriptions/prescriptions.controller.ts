@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from "@nestjs/common";
 import { PrescriptionsService } from "./prescriptions.service";
 import { CreatePrescriptionDto } from "./dto/create-prescription.dto";
 import { UpdatePrescriptionDto } from "./dto/update-prescription.dto";
@@ -7,6 +7,7 @@ import { GetPrescriptionDto, GetPrescriptionWithMedicalRecordDto } from "./dto";
 import { AdminAndDoctors } from "src/auth/decorators/get-user.decorator";
 import { AuthGuard } from "@nestjs/passport";
 import { OnlyAdmin } from "src/auth/decorators/only-admin.decorator";
+import { PaginationDto } from "src/common/dto/pagination.dto";
 
 @ApiTags("Prescriptions")
 @Controller("prescriptions")
@@ -30,8 +31,8 @@ export class PrescriptionsController {
   @ApiResponse({ status: 400, description: "Bad request" })
   @ApiResponse({ status: 404, description: "Prescriptions not found" })
   @ApiResponse({ status: 500, description: "Internal server error" })
-  findAll(@AdminAndDoctors() user: string) {
-    return this.prescriptionsService.findAll();
+  findAll(@AdminAndDoctors() user: string, @Query() paginationDto: PaginationDto) {
+    return this.prescriptionsService.findAll(paginationDto);
   }
 
   @Get(":id")
